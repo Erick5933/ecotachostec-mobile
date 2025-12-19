@@ -1,0 +1,29 @@
+# Dependencias instaladas para ecotachostec-mobile (Expo + React Native)
+
+expo-cli
+expo
+react
+react-native
+
+# React Navigation
+@react-navigation/native
+@react-navigation/native-stack
+@react-navigation/bottom-tabs
+react-native-screens
+react-native-safe-area-context
+
+# Axios para consumir el backend Django
+axios
+
+# AsyncStorage para token JWT
+@react-native-async-storage/async-storage
+
+# Secure Store (opcional para guardar tokens de forma segura)
+expo-secure-store
+
+# Iconos
+@expo/vector-icons
+
+# Formularios
+formik
+yup

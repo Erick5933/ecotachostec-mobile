@@ -1,0 +1,13 @@
+# Para mejores gráficos (opcional)
+expo install react-native-chart-kit
+# o
+expo install victory-native
+
+# Para mejores visualizaciones
+expo install react-native-svg
+
+# Para manejo de fechas
+expo install dayjs
+
+# Para compartir
+expo install react-native-share
