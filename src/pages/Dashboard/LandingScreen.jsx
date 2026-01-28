@@ -50,18 +50,43 @@ export default function LandingScreen({ navigation }) {
 
     const loadPublicStats = async () => {
         try {
-            const [tachosRes, deteccionesRes, ubicacionesRes] = await Promise.all([
+            // Usar Promise.allSettled para que no falle si una petición falla
+            const results = await Promise.allSettled([
                 api.get("/tachos/"),
                 api.get("/detecciones/"),
                 api.get("/ubicacion/cantones/"),
             ]);
 
-            // Animar contadores
-            animateCount('tachos', 0, tachosRes.data.length || 0);
-            animateCount('detecciones', 0, deteccionesRes.data.length || 0);
-            animateCount('ubicaciones', 0, ubicacionesRes.data.length || 0);
+            // Procesar resultados
+            const tachosRes = results[0];
+            const deteccionesRes = results[1];
+            const ubicacionesRes = results[2];
+
+            // Animar contadores solo si fueron exitosos
+            if (tachosRes.status === 'fulfilled') {
+                animateCount('tachos', 0, tachosRes.value?.data?.length || 0);
+            }
+            if (deteccionesRes.status === 'fulfilled') {
+                animateCount('detecciones', 0, deteccionesRes.value?.data?.length || 0);
+            }
+            if (ubicacionesRes.status === 'fulfilled') {
+                animateCount('ubicaciones', 0, ubicacionesRes.value?.data?.length || 0);
+            }
+
+            // Log de errores si los hay
+            if (tachosRes.status === 'rejected') {
+                console.warn("⚠️ Error cargando tachos:", tachosRes.reason?.message);
+            }
+            if (deteccionesRes.status === 'rejected') {
+                console.warn("⚠️ Error cargando detecciones:", deteccionesRes.reason?.message);
+            }
+            if (ubicacionesRes.status === 'rejected') {
+                console.warn("⚠️ Error cargando ubicaciones:", ubicacionesRes.reason?.message);
+            }
         } catch (error) {
-            console.error("Error cargando estadísticas públicas", error);
+            console.error("❌ Error cargando estadísticas públicas", error?.message);
+            // Mostrar valores por defecto
+            setStats({ tachos: 0, detecciones: 0, ubicaciones: 0 });
         }
     };
 

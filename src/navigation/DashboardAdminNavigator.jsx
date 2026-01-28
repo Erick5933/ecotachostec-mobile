@@ -10,6 +10,7 @@ import UserFormScreen from '../pages/Admin/UserForm'; // Nuevo
 import ReportsScreen from '../pages/Admin/Reports'; // Nuevo
 import StatisticsScreen from '../pages/Admin/Statistics'; // Nuevo
 
+
 const Stack = createStackNavigator();
 
 const DashboardAdminNavigator = () => {

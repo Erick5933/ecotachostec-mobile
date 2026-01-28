@@ -13,6 +13,7 @@ container: {
 scrollContent: {
     flexGrow: 1,
     padding: 20,
+    
 },
 scrollContentExtended: {
     flexGrow: 1,

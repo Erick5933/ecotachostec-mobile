@@ -18,6 +18,7 @@ export const colors = {
     info: '#0096C7',
 };
 
+
 export const tachosStyles = StyleSheet.create({
     // ========== CONTAINERS ==========
     container: {

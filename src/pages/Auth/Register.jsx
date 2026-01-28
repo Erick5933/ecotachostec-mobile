@@ -242,9 +242,23 @@ export default function RegisterScreen({ navigation }) {
     };
 
     const validateForm = () => {
-        if (!formData.nombre || !formData.email || !formData.telefono ||
-            !formData.password || !formData.confirmPassword) {
-            setLocalError("Por favor, completa todos los campos obligatorios");
+        // Nombre: requerido y solo letras/espacios
+        const nameRegex = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ\s]+$/;
+        if (!formData.nombre || !formData.nombre.trim()) {
+            setLocalError("El nombre es requerido");
+            return false;
+        } else if (!nameRegex.test(formData.nombre.trim())) {
+            setLocalError("El nombre solo puede contener letras y espacios");
+            return false;
+        }
+
+        // Teléfono: exactamente 10 dígitos
+        const phoneDigits = (formData.telefono || '').replace(/\D/g, '');
+        if (!phoneDigits) {
+            setLocalError("El teléfono es requerido");
+            return false;
+        } else if (phoneDigits.length !== 10) {
+            setLocalError("El teléfono debe contener exactamente 10 dígitos");
             return false;
         }
 
@@ -280,7 +294,7 @@ export default function RegisterScreen({ navigation }) {
             const dataToSend = {
                 nombre: formData.nombre,
                 email: formData.email,
-                telefono: formData.telefono,
+                telefono: (formData.telefono || '').replace(/\D/g, ''),
                 provincia: formData.provincia, // Enviamos ID de provincia
                 ciudad: formData.ciudad,       // Enviamos ID de ciudad
                 canton: formData.canton,       // Enviamos ID de cantón (solo esto)
@@ -471,6 +485,7 @@ export default function RegisterScreen({ navigation }) {
                                     value={formData.telefono}
                                     onChangeText={(value) => handleChange("telefono", value)}
                                     keyboardType="phone-pad"
+                                    maxLength={10}
                                 />
                             </View>
 

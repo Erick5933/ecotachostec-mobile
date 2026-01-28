@@ -12,6 +12,7 @@ import {
     Platform,
     TextInput,
     FlatList
+    
 } from "react-native";
 import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';

@@ -3,6 +3,7 @@ import { View, Text } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import { authStyles } from "../styles/authStyles";
 
+
 export const CustomPicker = ({
                                  value,
                                  onValueChange,

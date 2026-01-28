@@ -9,6 +9,7 @@ export default function LandingPage({ navigation }) {
                 style={styles.logo}
                 resizeMode="contain"
             />
+            
 
             <Text style={styles.title}>EcoTacho STEC</Text>
             <Text style={styles.subtitle}>Sistema de Monitoreo Inteligente</Text>

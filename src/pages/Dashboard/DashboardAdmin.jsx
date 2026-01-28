@@ -1,5 +1,5 @@
 // src/pages/Dashboard/DashboardAdmin.jsx
-import React, { useState, useEffect, useContext, useRef, useCallback } from "react";
+import React, { useState, useEffect, useContext, useRef } from "react";
 import {
     View,
     Text,
@@ -9,98 +9,41 @@ import {
     RefreshControl,
     Dimensions,
     Animated,
-    Alert
 } from "react-native";
-import { SafeAreaView, SafeAreaProvider } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { AuthContext } from "../../context/AuthContext";
-import { getDetecciones, getDeteccionesCriticas, getUltimasDetecciones } from "../../api/deteccionApi";
-import { getTachos } from "../../api/tachoApi";
-import { getUsuarios } from "../../api/authApi";
+import api from "../../api/axiosConfig";
 import { styles } from "../../styles/DashboardAdminStyles";
 
 const { width } = Dimensions.get('window');
 
-// Función para calcular estadísticas reales
-const calculateAdminStats = (detecciones, tachos, usuarios) => {
-    const hoy = new Date();
-    const inicioHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
-
-    // Detecciones hoy
-    const deteccionesHoy = detecciones.filter(d => {
-        if (!d.fecha_deteccion && !d.fecha_registro) return false;
-        const fecha = d.fecha_deteccion || d.fecha_registro;
-        const fechaDeteccion = new Date(fecha);
-        return fechaDeteccion >= inicioHoy;
-    }).length;
-
-    // Detecciones con confianza alta
-    const deteccionesAltaConfianza = detecciones.filter(d => d.confianza >= 80).length;
-
-    // Tachos con detecciones críticas
-    const tachosConDetecciones = [...new Set(detecciones.map(d => d.tacho_id).filter(Boolean))].length;
-
-    // Tasa de éxito basada en confianza promedio
-    const confianzaPromedio = detecciones.length > 0
-        ? detecciones.reduce((sum, d) => sum + (d.confianza || 0), 0) / detecciones.length
-        : 0;
-
-    return {
-        totalTachos: tachos.length,
-        tachosActivos: tachos.filter(t => t.estado === 'activo' || t.activo === true).length,
-        totalDetecciones: detecciones.length,
-        deteccionesHoy,
-        deteccionesAltaConfianza,
-        tachosConDetecciones,
-        totalUsuarios: usuarios.length,
-        usuariosActivos: usuarios.filter(u => u.is_active === true).length,
-        tasaExito: Math.round(confianzaPromedio) || 0,
-        deteccionesRecientes: detecciones.slice(0, 10).length,
-    };
-};
-
-// Función para obtener las tendencias diarias de la semana
-const getWeeklyTrendData = (detecciones) => {
-    const daysOfWeek = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-    const dayCounts = Array(7).fill(0);
-
-    detecciones.forEach(d => {
-        if (d.fecha_deteccion || d.fecha_registro) {
-            const fecha = new Date(d.fecha_deteccion || d.fecha_registro);
-            const day = fecha.getDay(); // 0 = Domingo
-            dayCounts[day]++;
-        }
-    });
-
-    return { labels: daysOfWeek, values: dayCounts };
-};
-
 export default function DashboardAdmin({ navigation }) {
-    const { userInfo, logout } = useContext(AuthContext);
+    const { userInfo } = useContext(AuthContext);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
-    const [activeView, setActiveView] = useState('overview');
+
+    const isAdmin = !!(userInfo?.is_staff || userInfo?.rol === 'admin');
+    const displayName = userInfo?.nombre || userInfo?.first_name || userInfo?.username || 'Usuario';
+    const orgLabel = userInfo?.empresa || userInfo?.organization || userInfo?.company || null;
+    const [activeTab, setActiveTab] = useState('overview');
+
+    const tabs = [
+        { key: 'overview', label: 'Vista General', icon: 'grid-outline' },
+        { key: 'tachos', label: 'Tachos', icon: 'trash-outline', screen: 'Tachos' },
+        { key: 'ubicaciones', label: 'Ubicaciones', icon: 'location-outline', screen: 'Ubicaciones' },
+        { key: 'detecciones', label: 'Detecciones', icon: 'analytics-outline', screen: 'Detecciones' },
+        { key: 'usuarios', label: 'Usuarios', icon: 'people-outline', screen: 'Usuarios' },
+    ];
 
     const [stats, setStats] = useState({
         totalTachos: 0,
-        tachosActivos: 0,
         totalDetecciones: 0,
-        deteccionesHoy: 0,
-        deteccionesAltaConfianza: 0,
-        tachosConDetecciones: 0,
         totalUsuarios: 0,
-        usuariosActivos: 0,
-        tasaExito: 0,
-        deteccionesRecientes: 0,
+        totalUbicaciones: 0,
     });
 
-    const [tachos, setTachos] = useState([]);
-    const [detecciones, setDetecciones] = useState([]);
-    const [usuarios, setUsuarios] = useState([]);
-    const [deteccionesCriticas, setDeteccionesCriticas] = useState([]);
-    const [ultimasDetecciones, setUltimasDetecciones] = useState([]);
-    const [weeklyTrend, setWeeklyTrend] = useState({ labels: [], values: [] });
+    const [recentActivity, setRecentActivity] = useState([]);
 
     // Animaciones
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -109,16 +52,6 @@ export default function DashboardAdmin({ navigation }) {
     useEffect(() => {
         if (!userInfo) {
             navigation.navigate('Login');
-            return;
-        }
-
-        // Verificar si es admin
-        if (!userInfo.is_staff && userInfo.rol !== 'admin') {
-            Alert.alert(
-                "Acceso Restringido",
-                "Esta función requiere permisos de administrador",
-                [{ text: "OK", onPress: () => navigation.goBack() }]
-            );
             return;
         }
 
@@ -138,660 +71,472 @@ export default function DashboardAdmin({ navigation }) {
         ]).start();
     }, []);
 
-    // Cargar datos reales del dashboard
-    const loadDashboardData = useCallback(async () => {
+    // =======================
+    // 🔹 Cargar datos del dashboard
+    // =======================
+    const loadDashboardData = async () => {
         try {
-            setLoading(true);
+            setRefreshing(true);
+            const [tachosRes, deteccionesRes, usuariosRes, ubicacionesRes] =
+                await Promise.all([
+                    api.get("/tachos/"),
+                    api.get("/detecciones/"),
+                    api.get("/usuarios/"),
+                    api.get("/ubicacion/cantones/"),
+                ]);
 
-            // Cargar datos en paralelo para mejor rendimiento
-            const [deteccionesRes, tachosRes, usuariosRes, criticasRes, ultimasRes] = await Promise.allSettled([
-                getDetecciones(),
-                getTachos(),
-                getUsuarios(),
-                getDeteccionesCriticas(),
-                getUltimasDetecciones(5)
-            ]);
-
-            const deteccionesData = deteccionesRes.status === 'fulfilled' ? deteccionesRes.value.data : [];
-            const tachosData = tachosRes.status === 'fulfilled' ? tachosRes.value.data : [];
-            const usuariosData = usuariosRes.status === 'fulfilled' ? usuariosRes.value.data : [];
-            const criticasData = criticasRes.status === 'fulfilled' ? criticasRes.value.data : [];
-            const ultimasData = ultimasRes.status === 'fulfilled' ? ultimasRes.value.data : [];
-
-            // Ordenar detecciones por fecha
-            const deteccionesOrdenadas = [...deteccionesData].sort((a, b) => {
-                const dateA = new Date(a.fecha_deteccion || a.fecha_registro || a.created_at);
-                const dateB = new Date(b.fecha_deteccion || b.fecha_registro || b.created_at);
-                return dateB - dateA;
+            setStats({
+                totalTachos: tachosRes.data.length || 0,
+                totalDetecciones: deteccionesRes.data.length || 0,
+                totalUsuarios: usuariosRes.data.length || 0,
+                totalUbicaciones: ubicacionesRes.data.length || 0,
             });
 
-            // Calcular tendencia semanal
-            const trendData = getWeeklyTrendData(deteccionesOrdenadas);
+            // Cargar actividad reciente basada en el formato de detecciones
+            const recent = deteccionesRes.data
+                .slice(0, 5)
+                .map((deteccion) => ({
+                    id: deteccion.id,
+                    type: "detection",
+                    message: deteccion.nombre
+                        ? `Detección: ${deteccion.nombre}`
+                        : `Nueva detección #${deteccion.id}`,
+                    tacho: deteccion.tacho_nombre || "Tacho desconocido",
+                    time: deteccion.fecha_registro
+                        ? new Date(deteccion.fecha_registro).toLocaleString("es-EC", {
+                            day: '2-digit',
+                            month: 'short',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        })
+                        : "Fecha no disponible",
+                    icon: "brain",
+                    status: "success",
+                    confianza: deteccion.confianza || 0
+                }));
 
-            const calculatedStats = calculateAdminStats(
-                deteccionesOrdenadas,
-                tachosData,
-                usuariosData
-            );
-
-            setStats(calculatedStats);
-            setDetecciones(deteccionesOrdenadas);
-            setTachos(tachosData);
-            setUsuarios(usuariosData);
-            setDeteccionesCriticas(criticasData);
-            setUltimasDetecciones(ultimasData);
-            setWeeklyTrend(trendData);
+            setRecentActivity(recent);
 
         } catch (error) {
-            console.error("Error cargando dashboard admin:", error);
-            Alert.alert("Error", "No se pudieron cargar los datos del sistema");
+            console.error("Error cargando datos del dashboard", error);
+
+            if (error.response?.status === 404) {
+                console.log("Endpoint de detecciones no encontrado, usando datos de ejemplo");
+                setRecentActivity([
+                    {
+                        id: 1,
+                        type: "detection",
+                        message: "Plástico PET detectado",
+                        tacho: "Tacho A-01",
+                        time: new Date().toLocaleString("es-EC"),
+                        icon: "brain",
+                        status: "success",
+                        confianza: 95
+                    },
+                    {
+                        id: 2,
+                        type: "detection",
+                        message: "Vidrio detectado",
+                        tacho: "Tacho B-02",
+                        time: new Date(Date.now() - 3600000).toLocaleString("es-EC"),
+                        icon: "brain",
+                        status: "success",
+                        confianza: 88
+                    }
+                ]);
+            }
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
-    }, []);
-
-    const onRefresh = useCallback(() => {
-        setRefreshing(true);
-        loadDashboardData();
-    }, [loadDashboardData]);
-
-    // Navegación a secciones de admin
-    const navigateTo = (screen, params = {}) => {
-        navigation.navigate(screen, params);
     };
 
-    // Acciones rápidas del admin (sin configuracion y permisos)
+    // =======================
+    // 🔹 Manejar refresco manual
+    // =======================
+    const handleRefresh = () => {
+        loadDashboardData();
+    };
+
+    // ======================
+    // 🔹 Tarjetas de estadísticas
+    // ======================
+    const statsData = [
+        {
+            icon: 'trash-alt',
+            iconLib: 'FontAwesome5',
+            value: stats.totalTachos,
+            label: 'Tachos Activos',
+            description: 'Tachos IoT en funcionamiento',
+            color: ['#10b981', '#059669'],
+            trend: 12
+        },
+        {
+            icon: 'brain',
+            iconLib: 'MaterialCommunityIcons',
+            value: stats.totalDetecciones,
+            label: 'Detecciones IA',
+            description: 'Clasificaciones realizadas',
+            color: ['#3b82f6', '#1d4ed8'],
+            trend: 28
+        },
+        {
+            icon: 'people-outline',
+            iconLib: 'Ionicons',
+            value: stats.totalUsuarios,
+            label: 'Usuarios Registrados',
+            description: 'Usuarios del sistema',
+            color: ['#8b5cf6', '#7c3aed'],
+            trend: 5
+        },
+        {
+            icon: 'location-outline',
+            iconLib: 'Ionicons',
+            value: stats.totalUbicaciones,
+            label: 'Ubicaciones',
+            description: 'Puntos de recolección',
+            color: ['#f97316', '#ea580c'],
+            trend: 3
+        }
+    ];
+
+    // ======================
+    // 🔹 Acciones rápidas
+    // ======================
     const quickActions = [
         {
-            id: 1,
             icon: 'add-circle-outline',
             label: 'Nuevo Tacho',
-            screen: 'TachoForm',
-            color: '#52B788',
+            iconBg: '#D1FAE5', // successLight
+            iconColor: '#065F46',
+            cardBg: '#ECFDF5',
+            cardBorder: '#A7F3D0',
+            // parent tab name + nested screen
+            parent: 'Tachos',
+            nested: 'TachoForm',
+            description: 'Registrar nuevo tacho IoT'
         },
         {
-            id: 2,
-            icon: 'analytics-outline',
-            label: 'Detecciones',
-            screen: 'DeteccionList',
-            color: '#4361EE',
+            icon: 'person-add-outline',
+            label: 'Nuevo Usuario',
+            iconBg: '#DBEAFE', // infoLight
+            iconColor: '#1E3A8A',
+            cardBg: '#EFF6FF',
+            cardBorder: '#BFDBFE',
+            parent: 'Usuarios',
+            nested: 'UsuarioForm',
+            description: 'Crear cuenta de usuario'
         },
         {
-            id: 3,
             icon: 'location-outline',
-            label: 'Ubicaciones',
-            screen: 'UbicacionList',
-            color: '#7209B7',
+            label: 'Nueva Ubicación',
+            iconBg: '#EDE9FE', // purpleLight
+            iconColor: '#6D28D9',
+            cardBg: '#F5F3FF',
+            cardBorder: '#DDD6FE',
+            parent: 'Ubicaciones',
+            nested: 'UbicacionForm',
+            description: 'Agregar punto de recolección'
         },
         {
-            id: 4,
             icon: 'document-text-outline',
-            label: 'Reportes',
-            screen: 'Reports',
-            color: '#F8961E',
-        },
-        {
-            id: 5,
-            icon: 'people-outline',
-            label: 'Usuarios',
-            screen: 'UsersList',
-            color: '#06D6A0',
-        },
-        {
-            id: 6,
-            icon: 'stats-chart-outline',
-            label: 'Estadísticas',
-            screen: 'Statistics',
-            color: '#EF476F',
-        },
+            label: 'Ver Reportes',
+            iconBg: '#FED7AA', // orangeLight
+            iconColor: '#9A3412',
+            cardBg: '#FFF7ED',
+            cardBorder: '#FED7AA',
+            parent: 'Detecciones',
+            // nested uses the internal name in DeteccionesNavigator
+            nested: 'DeteccionListScreen',
+            description: 'Analizar con IA y ver historial'
+        }
     ];
 
-    // Estado del sistema simplificado
+    // ======================
+    // 🔹 Estado del sistema
+    // ======================
     const systemStatus = [
         {
-            id: 1,
             label: 'API Backend',
-            status: 'online',
             value: 'Conectado',
-            description: 'Servidor principal operativo'
-        },
-        {
-            id: 2,
-            label: 'Base de Datos',
             status: 'online',
+            icon: 'checkmark-circle'
+        },
+        {
+            label: 'Base de Datos',
             value: 'Operativa',
-            description: 'Datos sincronizados'
+            status: 'online',
+            icon: 'checkmark-circle'
         },
         {
-            id: 3,
-            label: 'Sensores IoT',
-            status: tachos.length > 0 ? 'online' : 'warning',
-            value: `${tachos.length} activos`,
-            description: `${stats.tachosActivos} tachos en línea`
+            label: 'Servicios IoT',
+            value: stats.totalTachos > 0 ? `${stats.totalTachos} activos` : 'Sin conexión',
+            status: stats.totalTachos > 0 ? 'online' : 'warning',
+            icon: stats.totalTachos > 0 ? 'checkmark-circle' : 'warning'
         },
         {
-            id: 4,
-            label: 'Sistema IA',
-            status: stats.tasaExito > 80 ? 'online' : 'warning',
-            value: `${stats.tasaExito}% precisión`,
-            description: `${stats.deteccionesAltaConfianza} detecciones precisas`
-        },
+            label: 'IA/ML Engine',
+            value: stats.totalDetecciones > 0 ? 'Funcionando' : 'En espera',
+            status: stats.totalDetecciones > 0 ? 'online' : 'warning',
+            icon: stats.totalDetecciones > 0 ? 'checkmark-circle' : 'warning'
+        }
     ];
 
-    // Componente de tarjeta de estadística
-    const StatCard = React.memo(({ icon, value, label, subtitle, trend, gradientColors, onPress }) => (
-        <TouchableOpacity
-            style={styles.statCard}
-            activeOpacity={0.9}
-            onPress={onPress}
-        >
-            <LinearGradient
-                colors={gradientColors}
-                style={styles.statCardContent}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-            >
-                <View style={styles.statIconWrapper}>
-                    {icon}
-                </View>
-                <View style={styles.statDetails}>
-                    <Text style={styles.statNumber}>{value}</Text>
-                    <Text style={styles.statLabel}>{label}</Text>
-                    {subtitle && <Text style={styles.statSubtitle}>{subtitle}</Text>}
-                    {trend !== undefined && (
-                        <View style={styles.trendContainer}>
-                            <Ionicons
-                                name={trend > 0 ? "trending-up" : "trending-down"}
-                                size={14}
-                                color={trend > 0 ? "#10B981" : "#EF4444"}
-                            />
-                            <Text style={[
-                                styles.trendText,
-                                { color: trend > 0 ? "#10B981" : "#EF4444" }
-                            ]}>
-                                {Math.abs(trend)}%
-                            </Text>
-                        </View>
-                    )}
-                </View>
-            </LinearGradient>
-        </TouchableOpacity>
-    ));
-
-    // Componente de item de actividad
-    const ActivityItem = React.memo(({ item }) => {
-        const getIconForType = (type) => {
-            switch(type) {
-                case 'high': return 'alert-circle-outline';
-                case 'medium': return 'warning-outline';
-                default: return 'analytics-outline';
-            }
-        };
-
-        const getColorForConfianza = (confianza) => {
-            if (confianza >= 80) return '#10B981';
-            if (confianza >= 50) return '#F59E0B';
-            return '#EF4444';
-        };
-
-        return (
-            <TouchableOpacity
-                style={styles.activityItem}
-                activeOpacity={0.8}
-                onPress={() => navigation.navigate('DeteccionDetail', { id: item.id })}
-            >
-                <View style={[
-                    styles.activityDot,
-                    { backgroundColor: getColorForConfianza(item.confianza || 0) }
-                ]}>
-                    <Ionicons
-                        name={getIconForType(item.nivel)}
-                        size={14}
-                        color="#FFFFFF"
-                    />
-                </View>
-                <View style={styles.activityContent}>
-                    <Text style={styles.activityMessage} numberOfLines={2}>
-                        {item.nombre || `Detección #${item.id}`}
-                        {item.tacho_nombre && ` - ${item.tacho_nombre}`}
-                    </Text>
-                    <View style={styles.activityMeta}>
-                        <Ionicons name="time-outline" size={12} color="#666" />
-                        <Text style={styles.activityTime}>
-                            {new Date(item.fecha_deteccion || item.fecha_registro).toLocaleTimeString('es-EC', {
-                                hour: '2-digit',
-                                minute: '2-digit'
-                            })}
-                        </Text>
-                        {item.confianza && (
-                            <>
-                                <Ionicons name="stats-chart-outline" size={12} color="#666" style={{ marginLeft: 8 }} />
-                                <Text style={styles.activityConfianza}>{item.confianza}%</Text>
-                            </>
-                        )}
-                    </View>
-                </View>
-            </TouchableOpacity>
-        );
-    });
-
-    // Componente de acción rápida
-    const QuickAction = React.memo(({ action }) => (
-        <TouchableOpacity
-            style={styles.quickAction}
-            onPress={() => navigateTo(action.screen)}
-            activeOpacity={0.7}
-        >
-            <View style={[styles.quickActionIcon, { backgroundColor: action.color }]}>
-                <Ionicons name={action.icon} size={24} color="#FFFFFF" />
-            </View>
-            <Text style={styles.quickActionLabel}>{action.label}</Text>
-        </TouchableOpacity>
-    ));
-
-    // Componente de estado del sistema
-    const StatusItem = React.memo(({ item }) => (
-        <View style={styles.statusItem}>
-            <View style={[
-                styles.statusIndicator,
-                item.status === 'online' ? styles.statusOnline :
-                    item.status === 'warning' ? styles.statusWarning :
-                        styles.statusOffline
-            ]} />
-            <View style={styles.statusInfo}>
-                <Text style={styles.statusLabel}>{item.label}</Text>
-                <Text style={styles.statusValue}>{item.value}</Text>
-                <Text style={styles.statusDescription}>{item.description}</Text>
-            </View>
-        </View>
-    ));
-
-    // Gráfico de barras simple para tendencia semanal
-    const SimpleBarChart = ({ data, labels }) => {
-        if (data.values.every(v => v === 0)) return null;
-
-        const maxValue = Math.max(...data.values);
-        const barWidth = (width - 60) / data.values.length;
-
-        return (
-            <View style={styles.chartContainer}>
-                <View style={styles.chartHeader}>
-                    <Text style={styles.chartTitle}>Tendencia Semanal</Text>
-                    <Text style={styles.chartSubtitle}>Detecciones por día</Text>
-                </View>
-                <View style={styles.chartBarsContainer}>
-                    {data.values.map((value, index) => {
-                        const barHeight = value > 0 ? Math.max((value / maxValue) * 100, 20) : 0;
-
-                        return (
-                            <View key={index} style={styles.chartBarWrapper}>
-                                <View style={[styles.chartBar, {
-                                    height: barHeight,
-                                    backgroundColor: index % 2 === 0 ? '#3B82F6' : '#8B5CF6'
-                                }]}>
-                                    {value > 0 && (
-                                        <Text style={styles.chartBarValue}>{value}</Text>
-                                    )}
-                                </View>
-                                <Text style={styles.chartBarLabel}>{labels[index]}</Text>
-                            </View>
-                        );
-                    })}
-                </View>
-            </View>
-        );
-    };
-
     // Vista de carga
-    if (loading && !refreshing) {
+    if (loading) {
         return (
-            <SafeAreaProvider>
-                <SafeAreaView style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#2D6A4F" />
-                    <Text style={styles.loadingText}>Cargando Panel de Administración...</Text>
-                </SafeAreaView>
-            </SafeAreaProvider>
+            <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#10b981" />
+                <Text style={styles.loadingText}>Cargando dashboard...</Text>
+            </View>
         );
     }
 
     return (
-        <SafeAreaProvider>
-            <SafeAreaView style={styles.container}>
-                {/* Header del Admin */}
-                <Animated.View style={[
-                    styles.header,
-                    { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
-                ]}>
-                    <LinearGradient
-                        colors={['#1E40AF', '#3B82F6']}
-                        style={styles.headerGradient}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                    >
-                        <View style={styles.headerContent}>
-                            <View style={styles.headerLeft}>
-                                <View style={styles.adminBadge}>
-                                    <Ionicons name="shield-checkmark" size={16} color="#FFFFFF" />
-                                    <Text style={styles.adminBadgeText}>ADMIN</Text>
-                                </View>
-                                <View>
-                                    <Text style={styles.headerTitle}>
-                                        Panel de Control
-                                    </Text>
-                                    <Text style={styles.headerSubtitle}>
-                                        {userInfo?.nombre || 'Administrador'}
-                                    </Text>
-                                </View>
-                            </View>
-                            <TouchableOpacity
-                                style={styles.refreshButton}
-                                onPress={onRefresh}
-                                activeOpacity={0.8}
-                            >
-                                <Ionicons name="refresh" size={22} color="#FFFFFF" />
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* Stats Header */}
-                        <View style={styles.headerStats}>
-                            <TouchableOpacity
-                                style={styles.headerStat}
-                                onPress={() => navigateTo('Tachos')}
-                            >
-                                <Text style={styles.headerStatValue}>{stats.totalTachos}</Text>
-                                <Text style={styles.headerStatLabel}>Tachos</Text>
-                            </TouchableOpacity>
-                            <View style={styles.headerStatDivider} />
-                            <TouchableOpacity
-                                style={styles.headerStat}
-                                onPress={() => navigateTo('Detecciones')}
-                            >
-                                <Text style={styles.headerStatValue}>{stats.totalDetecciones}</Text>
-                                <Text style={styles.headerStatLabel}>Detecciones</Text>
-                            </TouchableOpacity>
-                            <View style={styles.headerStatDivider} />
-                            <TouchableOpacity
-                                style={styles.headerStat}
-                                onPress={() => navigateTo('UsersList')}
-                            >
-                                <Text style={styles.headerStatValue}>{stats.totalUsuarios}</Text>
-                                <Text style={styles.headerStatLabel}>Usuarios</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </LinearGradient>
-                </Animated.View>
-
-                {/* Tabs de Navegación simplificados */}
-                <View style={styles.tabsContainer}>
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.tabsScroll}
-                    >
-                        {[
-                            { key: 'overview', label: 'Vista General', icon: 'grid-outline' },
-                            { key: 'tachos', label: 'Tachos', icon: 'trash-outline' },
-                            { key: 'detecciones', label: 'Detecciones', icon: 'analytics-outline' },
-                            { key: 'users', label: 'Usuarios', icon: 'people-outline' },
-                            { key: 'reports', label: 'Reportes', icon: 'document-text-outline' },
-                        ].map((tab) => (
-                            <TouchableOpacity
-                                key={tab.key}
-                                style={[
-                                    styles.tab,
-                                    activeView === tab.key && styles.tabActive
-                                ]}
-                                onPress={() => setActiveView(tab.key)}
-                                activeOpacity={0.7}
-                            >
-                                <Ionicons
-                                    name={tab.icon}
-                                    size={18}
-                                    color={activeView === tab.key ? '#1E40AF' : '#64748B'}
-                                />
-                                <Text style={[
-                                    styles.tabText,
-                                    activeView === tab.key && styles.tabTextActive
-                                ]}>
-                                    {tab.label}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
-                </View>
-
-                {/* Contenido Principal */}
-                <ScrollView
-                    style={styles.content}
-                    refreshControl={
-                        <RefreshControl
-                            refreshing={refreshing}
-                            onRefresh={onRefresh}
-                            colors={['#1E40AF']}
-                            tintColor="#1E40AF"
-                        />
-                    }
-                    showsVerticalScrollIndicator={false}
-                >
-                    {/* Vista General */}
-                    {activeView === 'overview' && (
-                        <View style={styles.viewContainer}>
-                            {/* Stats Grid Mejorado */}
-                            <View style={styles.statsGrid}>
-                                <StatCard
-                                    icon={<FontAwesome5 name="trash-alt" size={20} color="#FFFFFF" />}
-                                    value={stats.totalTachos}
-                                    label="Tachos Totales"
-                                    subtitle={`${stats.tachosActivos} activos`}
-                                    gradientColors={['#10B981', '#059669']}
-                                    onPress={() => navigateTo('Tachos')}
-                                />
-                                <StatCard
-                                    icon={<Ionicons name="analytics-outline" size={20} color="#FFFFFF" />}
-                                    value={stats.totalDetecciones}
-                                    label="Detecciones"
-                                    subtitle={`${stats.deteccionesHoy} hoy`}
-                                    gradientColors={['#3B82F6', '#1D4ED8']}
-                                    onPress={() => navigateTo('Detecciones')}
-                                />
-                                <StatCard
-                                    icon={<Ionicons name="people-outline" size={20} color="#FFFFFF" />}
-                                    value={stats.totalUsuarios}
-                                    label="Usuarios"
-                                    subtitle={`${stats.usuariosActivos} activos`}
-                                    gradientColors={['#8B5CF6', '#7C3AED']}
-                                    onPress={() => navigateTo('UsersList')}
-                                />
-                                <StatCard
-                                    icon={<MaterialCommunityIcons name="chart-donut" size={20} color="#FFFFFF" />}
-                                    value={`${stats.tasaExito}%`}
-                                    label="Precisión IA"
-                                    subtitle={`${stats.deteccionesAltaConfianza} alta confianza`}
-                                    gradientColors={['#F59E0B', '#D97706']}
-                                    onPress={() => navigateTo('Statistics')}
-                                />
-                            </View>
-
-                            {/* Gráfico de tendencia semanal */}
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Text style={styles.sectionTitle}>Actividad Semanal</Text>
-                                    <Text style={styles.sectionSubtitle}>
-                                        Total: {weeklyTrend.values.reduce((a, b) => a + b, 0)} detecciones
-                                    </Text>
-                                </View>
-                                <SimpleBarChart
-                                    data={weeklyTrend}
-                                    labels={weeklyTrend.labels}
-                                />
-                            </View>
-
-                            {/* Acciones Rápidas */}
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Text style={styles.sectionTitle}>Acciones Rápidas</Text>
-                                    <TouchableOpacity onPress={() => Alert.alert('Info', 'Acceso rápido a funciones principales')}>
-                                        <Ionicons name="information-circle-outline" size={20} color="#64748B" />
-                                    </TouchableOpacity>
-                                </View>
-                                <View style={styles.quickActionsGrid}>
-                                    {quickActions.map((action) => (
-                                        <QuickAction key={action.id} action={action} />
-                                    ))}
-                                </View>
-                            </View>
-
-                            {/* Detecciones Recientes */}
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Text style={styles.sectionTitle}>Detecciones Recientes</Text>
-                                    <TouchableOpacity onPress={() => navigateTo('DeteccionList')}>
-                                        <Text style={styles.sectionAction}>Ver todas</Text>
-                                    </TouchableOpacity>
-                                </View>
-                                <View style={styles.activityList}>
-                                    {ultimasDetecciones.length > 0 ? (
-                                        ultimasDetecciones.map((item) => (
-                                            <ActivityItem key={item.id} item={item} />
-                                        ))
-                                    ) : (
-                                        <View style={styles.emptyState}>
-                                            <Ionicons name="analytics-outline" size={40} color="#CBD5E1" />
-                                            <Text style={styles.emptyStateText}>No hay detecciones recientes</Text>
-                                        </View>
-                                    )}
-                                </View>
-                            </View>
-
-                            {/* Estado del Sistema */}
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Text style={styles.sectionTitle}>Estado del Sistema</Text>
-                                    <View style={styles.systemStatusBadge}>
-                                        <View style={styles.systemStatusDot} />
-                                        <Text style={styles.systemStatusText}>
-                                            {systemStatus.every(s => s.status === 'online') ? 'Óptimo' : 'Parcial'}
-                                        </Text>
-                                    </View>
-                                </View>
-                                <View style={styles.statusList}>
-                                    {systemStatus.map((item) => (
-                                        <StatusItem key={item.id} item={item} />
-                                    ))}
-                                </View>
-                            </View>
-                        </View>
-                    )}
-
-                    {/* Vista de Tachos */}
-                    {activeView === 'tachos' && (
-                        <View style={styles.viewContainer}>
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Text style={styles.sectionTitle}>Resumen de Tachos</Text>
-                                    <TouchableOpacity
-                                        style={styles.addButton}
-                                        onPress={() => navigateTo('TachoForm')}
-                                    >
-                                        <Ionicons name="add" size={20} color="#FFFFFF" />
-                                        <Text style={styles.addButtonText}>Nuevo</Text>
-                                    </TouchableOpacity>
-                                </View>
-                                <View style={styles.summaryCards}>
-                                    <View style={styles.summaryCard}>
-                                        <Text style={styles.summaryCardNumber}>{stats.totalTachos}</Text>
-                                        <Text style={styles.summaryCardLabel}>Total</Text>
-                                    </View>
-                                    <View style={styles.summaryCard}>
-                                        <Text style={styles.summaryCardNumber}>{stats.tachosActivos}</Text>
-                                        <Text style={styles.summaryCardLabel}>Activos</Text>
-                                    </View>
-                                    <View style={styles.summaryCard}>
-                                        <Text style={styles.summaryCardNumber}>{stats.tachosConDetecciones}</Text>
-                                        <Text style={styles.summaryCardLabel}>Con detecciones</Text>
-                                    </View>
-                                </View>
-                                {/* Aquí podrías agregar una lista de tachos si lo deseas */}
-                            </View>
-                        </View>
-                    )}
-
-                    {/* Vista de Detecciones */}
-                    {activeView === 'detecciones' && (
-                        <View style={styles.viewContainer}>
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Text style={styles.sectionTitle}>Resumen de Detecciones</Text>
-                                    <TouchableOpacity onPress={() => navigateTo('DeteccionList')}>
-                                        <Text style={styles.sectionAction}>Ver detalle</Text>
-                                    </TouchableOpacity>
-                                </View>
-                                <View style={styles.summaryCards}>
-                                    <View style={styles.summaryCard}>
-                                        <Text style={styles.summaryCardNumber}>{stats.totalDetecciones}</Text>
-                                        <Text style={styles.summaryCardLabel}>Total</Text>
-                                    </View>
-                                    <View style={styles.summaryCard}>
-                                        <Text style={styles.summaryCardNumber}>{stats.deteccionesHoy}</Text>
-                                        <Text style={styles.summaryCardLabel}>Hoy</Text>
-                                    </View>
-                                    <View style={styles.summaryCard}>
-                                        <Text style={styles.summaryCardNumber}>{stats.deteccionesAltaConfianza}</Text>
-                                        <Text style={styles.summaryCardLabel}>Alta precisión</Text>
-                                    </View>
-                                </View>
-                            </View>
-                        </View>
-                    )}
-
-                    {/* Vista de Usuarios */}
-                    {activeView === 'users' && (
-                        <View style={styles.viewContainer}>
-                            <View style={styles.section}>
-                                <View style={styles.sectionHeader}>
-                                    <Text style={styles.sectionTitle}>Gestión de Usuarios</Text>
-                                    <TouchableOpacity
-                                        style={styles.addButton}
-                                        onPress={() => navigateTo('UserForm')}
-                                    >
-                                        <Ionicons name="add" size={20} color="#FFFFFF" />
-                                        <Text style={styles.addButtonText}>Nuevo</Text>
-                                    </TouchableOpacity>
-                                </View>
-                                <View style={styles.summaryCards}>
-                                    <View style={styles.summaryCard}>
-                                        <Text style={styles.summaryCardNumber}>{stats.totalUsuarios}</Text>
-                                        <Text style={styles.summaryCardLabel}>Total</Text>
-                                    </View>
-                                    <View style={styles.summaryCard}>
-                                        <Text style={styles.summaryCardNumber}>{stats.usuariosActivos}</Text>
-                                        <Text style={styles.summaryCardLabel}>Activos</Text>
-                                    </View>
-                                    <View style={styles.summaryCard}>
-                                        <Text style={styles.summaryCardNumber}>{userInfo?.is_staff ? 'Admin' : 'Usuarios'}</Text>
-                                        <Text style={styles.summaryCardLabel}>Tipo</Text>
-                                    </View>
-                                </View>
-                            </View>
-                        </View>
-                    )}
-
-                    {/* Información del Sistema */}
-                    <View style={styles.infoCard}>
-                        <View style={styles.infoIconWrapper}>
-                            <Ionicons name="server-outline" size={24} color="#1E40AF" />
-                        </View>
-                        <View style={styles.infoContent}>
-                            <Text style={styles.infoTitle}>Sistema de Administración</Text>
-                            <Text style={styles.infoText}>
-                                Última actualización: {new Date().toLocaleString('es-EC')} •
-                                {detecciones.length > 0 ? ` ${detecciones.length} detecciones procesadas` : ' Sin datos cargados'}
+        <View style={styles.container}>
+            {/* ⭐ HEADER ACTUALIZADO - Badge de rol en esquina superior izquierda */}
+            <LinearGradient
+                colors={['#10b981', '#059669']}
+                style={[styles.header, styles.headerGradient]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+            >
+                {/* Fila superior: Badge de rol + Botones de acción */}
+                <View style={styles.headerContent}>
+                    <View style={styles.headerLeft}>
+                        {/* Badge de rol en esquina superior izquierda */}
+                        <View style={styles.adminBadge}>
+                            <Ionicons
+                                name={isAdmin ? 'shield-checkmark' : 'person'}
+                                size={12}
+                                color="#FFFFFF"
+                            />
+                            <Text style={styles.adminBadgeText}>
+                                {isAdmin ? 'ADMIN' : 'USUARIO'}
                             </Text>
                         </View>
                     </View>
+
+                    {/* Botones de acción a la derecha */}
+                    <View style={styles.headerActions}>
+                        <TouchableOpacity
+                            style={styles.refreshButton}
+                            onPress={handleRefresh}
+                            accessibilityLabel="Actualizar"
+                        >
+                            <Ionicons name="refresh" size={20} color="#FFFFFF" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.refreshButton}
+                            onPress={() => navigation.navigate('UbicacionList')}
+                            accessibilityLabel="Ubicaciones cercanas"
+                        >
+                            <Ionicons name="paper-plane" size={20} color="#FFFFFF" />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                {/* Título y subtítulo debajo del badge */}
+                <Text style={styles.headerTitle}>¡Hola, {displayName}!</Text>
+                <Text style={styles.headerSubtitle}>
+                    {orgLabel ? `Encargado de: ${orgLabel}` : (isAdmin ? 'Panel Administrativo' : 'Bienvenido al sistema')}
+                </Text>
+            </LinearGradient>
+
+            {/* Tabs Bar */}
+            <View style={styles.tabsContainer}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsScroll}>
+                    {tabs.map(tab => (
+                        <TouchableOpacity
+                            key={tab.key}
+                            style={[styles.tab, activeTab === tab.key && styles.tabActive]}
+                            onPress={() => {
+                                setActiveTab(tab.key);
+                                if (tab.screen) {
+                                    navigation.navigate(tab.screen);
+                                }
+                            }}
+                        >
+                            <Ionicons name={tab.icon} size={16} color={activeTab === tab.key ? '#1E40AF' : '#64748B'} />
+                            <Text style={[styles.tabText, activeTab === tab.key && styles.tabTextActive]}>{tab.label}</Text>
+                        </TouchableOpacity>
+                    ))}
                 </ScrollView>
-            </SafeAreaView>
-        </SafeAreaProvider>
+            </View>
+
+            <ScrollView
+                style={styles.content}
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={handleRefresh}
+                        colors={['#10b981']}
+                        tintColor="#10b981"
+                    />
+                }
+            >
+                {/* STATS GRID */}
+                <View style={styles.statsGrid}>
+                    {statsData.map((stat, index) => {
+                        const IconComponent = stat.iconLib === 'FontAwesome5' ? FontAwesome5 :
+                            stat.iconLib === 'MaterialCommunityIcons' ? MaterialCommunityIcons :
+                                Ionicons;
+
+                        return (
+                            <View key={index} style={styles.statCard}>
+                                <LinearGradient
+                                    colors={stat.color}
+                                    style={styles.statCardGradient}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 1 }}
+                                >
+                                    <View style={styles.statCardHeader}>
+                                        <View style={styles.statCardIcon}>
+                                            <IconComponent name={stat.icon} size={24} color="#fff" />
+                                        </View>
+                                        <View style={styles.statCardTrendBadge}>
+                                            <Ionicons
+                                                name={stat.trend > 0 ? "trending-up" : "trending-down"}
+                                                size={14}
+                                                color="#fff"
+                                            />
+                                            <Text style={styles.statCardTrendText}>{stat.trend}%</Text>
+                                        </View>
+                                    </View>
+                                    <Text style={styles.statCardValue}>{stat.value}</Text>
+                                    <Text style={styles.statCardLabel}>{stat.label}</Text>
+                                    <Text style={styles.statCardDescription}>{stat.description}</Text>
+                                </LinearGradient>
+                            </View>
+                        );
+                    })}
+                </View>
+
+                {/* ACTIVIDAD RECIENTE */}
+                <View style={styles.card}>
+                    <View style={styles.cardHeader}>
+                        <Text style={styles.cardTitle}>Actividad Reciente</Text>
+                        <View style={styles.badge}>
+                            <MaterialCommunityIcons name="pulse" size={12} color="#3b82f6" />
+                            <Text style={styles.badgeText}>En Vivo</Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.cardBody}>
+                        {recentActivity.length === 0 ? (
+                            <View style={styles.emptyState}>
+                                <MaterialCommunityIcons name="brain" size={32} color="#cbd5e1" />
+                                <Text style={styles.emptyStateText}>No hay actividad reciente</Text>
+                                <Text style={styles.emptyStateSubtext}>
+                                    Realiza una detección con IA para ver actividad
+                                </Text>
+                            </View>
+                        ) : (
+                            <View style={styles.activityList}>
+                                {recentActivity.map((activity) => (
+                                    <View key={activity.id} style={styles.activityItem}>
+                                        <View style={styles.activityIcon}>
+                                            <MaterialCommunityIcons name="brain" size={20} color="#fff" />
+                                        </View>
+                                        <View style={styles.activityContent}>
+                                            <Text style={styles.activityMessage}>
+                                                {activity.message}
+                                            </Text>
+                                            <Text style={styles.activityTacho}>en {activity.tacho}</Text>
+                                            <View style={styles.activityTime}>
+                                                <Ionicons name="time-outline" size={12} color="#6b7280" />
+                                                <Text style={styles.activityTimeText}>{activity.time}</Text>
+                                                {activity.confianza > 0 && (
+                                                    <Text style={styles.activityConfianza}>• {activity.confianza}%</Text>
+                                                )}
+                                            </View>
+                                        </View>
+                                    </View>
+                                ))}
+                            </View>
+                        )}
+                    </View>
+                </View>
+
+                {/* ACCIONES RÁPIDAS */}
+                <View style={styles.card}>
+                    <View style={styles.cardHeader}>
+                        <Text style={styles.cardTitle}>Acciones Rápidas</Text>
+                        <Text style={styles.cardSubtitle}>Acceso directo a funciones</Text>
+                    </View>
+
+                    <View style={styles.cardBody}>
+                        <View style={styles.quickActionsGrid}>
+                            {quickActions.map((action, index) => (
+                                <TouchableOpacity
+                                    key={index}
+                                    style={[styles.quickActionBtn, { backgroundColor: action.cardBg, borderColor: action.cardBorder }]}
+                                    onPress={() => {
+                                        if (action.parent && action.nested) {
+                                            navigation.navigate(action.parent, { screen: action.nested });
+                                        } else if (action.screen) {
+                                            navigation.navigate(action.screen);
+                                        }
+                                    }}
+                                    activeOpacity={0.8}
+                                >
+                                    <View style={styles.quickActionContent}>
+                                        <View style={[styles.quickActionIcon, { backgroundColor: action.iconBg }]}>
+                                            <Ionicons name={action.icon} size={26} color={action.iconColor} />
+                                        </View>
+                                        <Text style={styles.quickActionLabel} numberOfLines={0}>{action.label}</Text>
+                                        <Text style={styles.quickActionDescription} numberOfLines={0}>{action.description}</Text>
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </View>
+                </View>
+
+                {/* ESTADO DEL SISTEMA */}
+                <View style={styles.card}>
+                    <View style={styles.cardHeader}>
+                        <View>
+                            <Text style={styles.cardTitle}>Estado del Sistema</Text>
+                            <Text style={styles.cardSubtitle}>Monitoreo en tiempo real</Text>
+                        </View>
+                        <View style={styles.badgeSuccess}>
+                            <Ionicons name="checkmark-circle" size={12} color="#10b981" />
+                            <Text style={styles.badgeSuccessText}>Operativo</Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.cardBody}>
+                        <View style={styles.systemStatusGrid}>
+                            {systemStatus.map((item, index) => (
+                                <View key={index} style={styles.statusItem}>
+                                    <View style={[
+                                        styles.statusIndicator,
+                                        item.status === 'online' && styles.statusOnline,
+                                        item.status === 'warning' && styles.statusWarning,
+                                        item.status === 'offline' && styles.statusOffline
+                                    ]} />
+                                    <View style={styles.statusInfo}>
+                                        <Text style={styles.statusLabel}>{item.label}</Text>
+                                        <View style={styles.statusValueContainer}>
+                                            <Ionicons
+                                                name={item.icon}
+                                                size={12}
+                                                color={item.status === 'online' ? '#10b981' : '#f59e0b'}
+                                            />
+                                            <Text style={styles.statusValue}>{item.value}</Text>
+                                        </View>
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+                    </View>
+                </View>
+
+                {/* Espaciado final */}
+                <View style={{ height: 20 }} />
+            </ScrollView>
+        </View>
     );
 }

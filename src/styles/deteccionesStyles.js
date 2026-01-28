@@ -51,21 +51,28 @@ export const deteccionStyles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 20,
         paddingHorizontal: 16,
-        backgroundColor: deteccionColors.white,
+        backgroundColor: '#10B981',
         borderBottomWidth: 1,
-        borderBottomColor: deteccionColors.grayLight,
+        borderBottomColor: '#0E8F66',
+    },
+    headerTitleContainer: {
+        flex: 1,
+        alignItems: 'flex-start',
+        marginTop: 22,
+        paddingLeft: 12,
     },
     headerTitle: {
         fontSize: 24,
         fontWeight: '700',
-        color: deteccionColors.dark,
+        color: '#FFFFFF',
     },
     headerSubtitle: {
         fontSize: 14,
-        color: deteccionColors.gray,
+        color: 'rgba(255,255,255,0.9)',
         marginTop: 4,
     },
 
+    
     // ========== FILTERS & CONTROLS ==========
     filterSection: {
         backgroundColor: deteccionColors.white,

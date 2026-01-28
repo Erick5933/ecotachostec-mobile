@@ -1,7 +1,7 @@
 // src/navigation/DeteccionesNavigator.jsx
 import React from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
-import DeteccionListScreen from '../pages/Detecciones/DeteccionList';
+import DeteccionesScreen from '../pages/Detecciones/DeteccionesScreen';
 import DeteccionDetailScreen from '../pages/Detecciones/DeteccionDetail';
 import DeteccionFormScreen from '../pages/Detecciones/DeteccionForm';
 
@@ -16,8 +16,8 @@ const DeteccionesNavigator = () => {
             }}
         >
             <Stack.Screen
-                name="DeteccionList"
-                component={DeteccionListScreen}
+                name="DeteccionListScreen"
+                component={DeteccionesScreen}
             />
             <Stack.Screen
                 name="DeteccionDetail"

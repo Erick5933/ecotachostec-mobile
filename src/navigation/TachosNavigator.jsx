@@ -7,6 +7,7 @@ import TachoDetail from '../pages/Tachos/TachoDetail';
 
 const Stack = createStackNavigator();
 
+
 const TachosNavigator = () => {
     return (
         <Stack.Navigator

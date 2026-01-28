@@ -1,6 +1,7 @@
 // src/api/deteccionApi.js
 import axios from "./axiosConfig";
 
+
 // ==================== CRUD BÁSICO ====================
 export const getDetecciones = () => axios.get("/detecciones/");
 export const getDeteccionById = (id) => axios.get(`/detecciones/${id}/`);

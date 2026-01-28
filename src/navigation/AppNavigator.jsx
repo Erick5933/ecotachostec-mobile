@@ -5,9 +5,10 @@ import { AuthContext } from '../context/AuthContext';
 import LandingScreen from '../pages/Dashboard/LandingScreen';
 import LoginScreen from '../pages/Auth/Login';
 import RegisterScreen from '../pages/Auth/Register';
-import DeteccionesNavigator from './DeteccionesNavigator'; // CAMBIADO
+import DeteccionesNavigator from './DeteccionesNavigator';
 import TachosNavigator from './TachosNavigator';
-import UbicacionListScreen from '../pages/Ubicaciones/UbicacionList';
+import UsuariosNavigator from './UsuariosNavigator';
+import UbicacionesNavigator from './UbicacionesNavigator';
 import ProfileScreen from '../pages/Auth/Profile';
 import DashboardUser from '../pages/Dashboard/DashboardUser';
 import DashboardAdmin from '../pages/Dashboard/DashboardAdmin';
@@ -35,9 +36,14 @@ export default function AppNavigator() {
                                         title: 'Panel Admin'
                                     },
                                     {
-                                        name: 'Detecciones',
-                                        component: DeteccionesNavigator, // CAMBIADO
-                                        title: 'Detecciones'
+                                        name: 'Usuarios',
+                                        component: UsuariosNavigator,
+                                        title: 'Usuarios'
+                                    },
+                                    {
+                                        name: 'Ubicaciones',
+                                        component: UbicacionesNavigator,
+                                        title: 'Ubicaciones'
                                     },
                                     {
                                         name: 'Tachos',
@@ -45,9 +51,9 @@ export default function AppNavigator() {
                                         title: 'Tachos'
                                     },
                                     {
-                                        name: 'Ubicaciones',
-                                        component: UbicacionListScreen,
-                                        title: 'Ubicaciones'
+                                        name: 'Detecciones',
+                                        component: DeteccionesNavigator, // CAMBIADO
+                                        title: 'Detecciones'
                                     },
                                     {
                                         name: 'Perfil',

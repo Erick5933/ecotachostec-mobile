@@ -30,6 +30,7 @@ const DeteccionDetail = () => {
     const [region, setRegion] = useState(null);
     const [tachoRegion, setTachoRegion] = useState(null);
     const [mapReady, setMapReady] = useState(false);
+    const [imageError, setImageError] = useState(false);
 
     const loadDeteccion = async () => {
         try {
@@ -120,13 +121,13 @@ const DeteccionDetail = () => {
         if (!deteccion) return;
 
         try {
-            await Share.share({
+                await Share.share({
                 title: `Detección: ${deteccion.nombre || 'Análisis de residuos'}`,
                 message: `Detección ID: #${deteccion.id}\n\n` +
                     `Tacho: ${deteccion.tacho_nombre || tacho?.nombre || 'No especificado'}\n` +
                     `Tipo: ${deteccion.tipo_residuo || 'No especificado'}\n` +
-                    `Confianza: ${deteccion.confianza || 'N/A'}%\n` +
-                    `Fecha: ${new Date(deteccion.fecha_registro).toLocaleString('es-ES')}`,
+                    `Confianza: ${confPercent || 'N/A'}%\n` +
+                    `Fecha: ${formatFecha(deteccion.fecha_registro || deteccion.created_at)}`,
             });
         } catch (error) {
             console.error('Error compartiendo:', error);
@@ -173,11 +174,54 @@ const DeteccionDetail = () => {
         return '#F44336'; // Rojo
     };
 
+    const normalizeConfianza = (raw) => {
+        if (raw === null || raw === undefined || raw === '') return 0;
+        const parsed = Number(String(raw).replace(',', '.'));
+        if (Number.isNaN(parsed)) return 0;
+        // If value looks like 0..1 keep; if >1 assume percentage
+        const percent = parsed > 1 ? parsed : parsed * 100;
+        return Math.round(percent);
+    };
+
+    const formatFecha = (fecha) => {
+        if (!fecha) return '—';
+        try {
+            const d = (typeof fecha === 'number') ? new Date(fecha) : new Date(String(fecha));
+            if (Number.isNaN(d.getTime())) return '—';
+            return d.toLocaleString('es-EC', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        } catch (e) {
+            return '—';
+        }
+    };
+
     const getConfianzaLabel = (confianza) => {
         if (!confianza) return 'No disponible';
         if (confianza >= 90) return 'Alta';
         if (confianza >= 70) return 'Media';
         return 'Baja';
+    };
+
+    const getClasificacionText = (clasificacion) => {
+        if (!clasificacion) return 'No definido';
+        const lower = clasificacion.toLowerCase();
+        if (lower.includes('organico')) return 'Orgánico';
+        if (lower.includes('reciclable')) return 'Reciclable';
+        if (lower.includes('inorganico')) return 'Inorgánico';
+        return clasificacion;
+    };
+
+    const getClasificacionColors = (clasificacion) => {
+        const lower = (clasificacion || '').toLowerCase();
+        if (lower.includes('organico')) return { color: '#065F46', bg: 'rgba(16,185,129,0.12)', border: '#10b981' };
+        if (lower.includes('reciclable')) return { color: '#92400E', bg: 'rgba(245,158,11,0.12)', border: '#f59e0b' };
+        if (lower.includes('inorganico')) return { color: '#1E40AF', bg: 'rgba(59,130,246,0.12)', border: '#3b82f6' };
+        return { color: '#6b7280', bg: 'rgba(156,163,175,0.08)', border: '#94a3b8' };
     };
 
     // Determinar qué región usar para el mapa
@@ -187,6 +231,8 @@ const DeteccionDetail = () => {
         latitudeDelta: 0.02,
         longitudeDelta: 0.02,
     };
+
+    const confPercent = deteccion ? normalizeConfianza(deteccion.confianza ?? deteccion.confianza_ia) : 0;
 
     if (loading) {
         return (
@@ -226,7 +272,7 @@ const DeteccionDetail = () => {
                     onPress={() => navigation.goBack()}
                     style={[deteccionStyles.flexRow, deteccionStyles.gapSm]}
                 >
-                    <Ionicons name="arrow-back" size={24} color={deteccionColors.dark} />
+                    <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
                 </TouchableOpacity>
 
                 <View style={deteccionStyles.headerTitleContainer}>
@@ -237,28 +283,41 @@ const DeteccionDetail = () => {
                         Análisis por inteligencia artificial
                     </Text>
                 </View>
-
                 <View style={deteccionStyles.headerActions}>
                     <TouchableOpacity
-                        style={[deteccionStyles.btnIcon, { backgroundColor: 'rgba(33, 150, 243, 0.1)' }]}
+                        style={[deteccionStyles.btnIcon, { backgroundColor: 'rgba(255,255,255,0.12)' }]}
                         onPress={handleShare}
                     >
-                        <Ionicons name="share-outline" size={20} color={deteccionColors.primary} />
+                        <Ionicons name="share-outline" size={20} color="#FFFFFF" />
                     </TouchableOpacity>
                 </View>
             </View>
 
             <View style={deteccionStyles.screenContainer}>
+                {/* Summary card moved below header for better layout */}
+                <View style={[deteccionStyles.card, { marginBottom: 12, borderLeftWidth: 6, borderLeftColor: '#9C27B0', backgroundColor: '#FBF7FF' }]}>
+                    <View style={deteccionStyles.statsRow}>
+                        <View style={deteccionStyles.statCard}>
+                            <Text style={deteccionStyles.statValue}>{confPercent > 0 ? `${confPercent}%` : '—'}</Text>
+                            <Text style={deteccionStyles.statLabel}>Confianza IA</Text>
+                        </View>
+
+                        <View style={deteccionStyles.statCard}>
+                            <Text style={[deteccionStyles.statValue, { fontSize: 22 }]}>{getClasificacionText(deteccion.tipo_residuo || deteccion.clase_detectada || deteccion.clasificacion)}</Text>
+                            <Text style={deteccionStyles.statLabel}>Clasificación</Text>
+                        </View>
+                    </View>
+                </View>
                 {/* Información principal */}
-                <View style={[deteccionStyles.card, { borderLeftColor: '#9C27B0' }]}>
+                <View style={[deteccionStyles.card, { borderLeftColor: '#4CAF50', borderLeftWidth: 6, backgroundColor: '#F7FFF7' }]}>
                     <View style={deteccionStyles.detailHeader}>
                         <View style={{ flex: 1 }}>
                             <View style={[deteccionStyles.flexRow, deteccionStyles.gapMd, { marginBottom: 12 }]}>
                                 <View style={[
                                     styles.iconContainer,
-                                    { backgroundColor: 'rgba(156, 39, 176, 0.1)' }
+                                    { backgroundColor: 'rgba(76, 175, 80, 0.1)' }
                                 ]}>
-                                    <Ionicons name="analytics" size={24} color="#9C27B0" />
+                                    <Ionicons name="analytics" size={24} color="#4CAF50" />
                                 </View>
                                 <View style={{ flex: 1 }}>
                                     <Text style={deteccionStyles.detailTitle}>
@@ -281,18 +340,18 @@ const DeteccionDetail = () => {
                                     </Text>
                                 </View>
 
-                                {deteccion.confianza && (
-                                    <View style={[
-                                        deteccionStyles.badge,
-                                        { backgroundColor: `${getConfianzaColor(deteccion.confianza)}20` }
-                                    ]}>
-                                        <Text style={[
-                                            deteccionStyles.badgeText,
-                                            { color: getConfianzaColor(deteccion.confianza) }
-                                        ]}>
-                                            {getConfianzaLabel(deteccion.confianza)} Confianza
-                                        </Text>
-                                    </View>
+                                {confPercent > 0 && (
+                                        <View style={[
+                                                deteccionStyles.badge,
+                                                { backgroundColor: `${getConfianzaColor(confPercent)}20` }
+                                            ]}>
+                                                <Text style={[
+                                                    deteccionStyles.badgeText,
+                                                    { color: getConfianzaColor(confPercent) }
+                                                ]}>
+                                                    {getConfianzaLabel(confPercent)} Confianza
+                                                </Text>
+                                            </View>
                                 )}
                             </View>
                         </View>
@@ -321,14 +380,8 @@ const DeteccionDetail = () => {
                                 <Ionicons name="calendar-outline" size={12} /> Fecha
                             </Text>
                             <Text style={deteccionStyles.detailValue}>
-                                {new Date(deteccion.fecha_registro).toLocaleString('es-ES', {
-                                    day: 'numeric',
-                                    month: 'short',
-                                    year: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                })}
-                            </Text>
+                                    {formatFecha(deteccion.fecha_registro || deteccion.created_at)}
+                                </Text>
                         </View>
 
                         {deteccion.tipo_residuo && (
@@ -340,7 +393,7 @@ const DeteccionDetail = () => {
                             </View>
                         )}
 
-                        {deteccion.confianza && (
+                        {confPercent > 0 && (
                             <View style={deteccionStyles.detailItem}>
                                 <Text style={deteccionStyles.detailLabel}>
                                     <Ionicons name="stats-chart-outline" size={12} /> Confianza
@@ -353,8 +406,8 @@ const DeteccionDetail = () => {
                                         <View
                                             style={{
                                                 height: '100%',
-                                                width: `${deteccion.confianza}%`,
-                                                backgroundColor: getConfianzaColor(deteccion.confianza),
+                                                width: `${confPercent}%`,
+                                                backgroundColor: getConfianzaColor(confPercent),
                                                 borderRadius: 4,
                                             }}
                                         />
@@ -363,12 +416,12 @@ const DeteccionDetail = () => {
                                         deteccionStyles.detailValue,
                                         {
                                             fontSize: 16,
-                                            color: getConfianzaColor(deteccion.confianza),
+                                            color: getConfianzaColor(confPercent),
                                             minWidth: 50,
                                             textAlign: 'right'
                                         }
                                     ]}>
-                                        {deteccion.confianza}%
+                                        {confPercent}%
                                     </Text>
                                 </View>
                             </View>
@@ -428,7 +481,7 @@ const DeteccionDetail = () => {
                 </View>
 
                 {/* Mapa */}
-                <View style={[deteccionStyles.card, { marginTop: 16 }]}>
+                <View style={[deteccionStyles.card, { marginTop: 16, borderLeftWidth: 6, borderLeftColor: '#4CAF50', backgroundColor: '#F7FFF7' }]}>
                     <Text style={deteccionStyles.detailSectionTitle}>
                         <Ionicons name="map-outline" size={18} /> Ubicación
                     </Text>
@@ -445,7 +498,7 @@ const DeteccionDetail = () => {
                                 <Marker
                                     coordinate={region}
                                     title="Detección IA"
-                                    description={`Confianza: ${deteccion.confianza || 'N/A'}%`}
+                                    description={`Confianza: ${confPercent || 'N/A'}%`}
                                 >
                                     <View style={styles.markerContainer}>
                                         <View style={[styles.marker, { backgroundColor: '#9C27B0' }]}>
@@ -499,18 +552,28 @@ const DeteccionDetail = () => {
 
                 {/* Imagen de la detección */}
                 {deteccion.imagen && (
-                    <View style={[deteccionStyles.card, { marginTop: 16 }]}>
+                    <View style={[deteccionStyles.card, { marginTop: 16, borderLeftWidth: 6, borderLeftColor: '#F59E0B', backgroundColor: '#FFFDF5' }]}>
                         <Text style={deteccionStyles.detailSectionTitle}>
                             <Ionicons name="image-outline" size={18} /> Imagen Analizada
                         </Text>
 
                         <View style={styles.imageContainer}>
-                            <Image
-                                source={{ uri: deteccion.imagen }}
-                                style={styles.image}
-                                resizeMode="cover"
-                                onError={(error) => console.log('Error cargando imagen:', error)}
-                            />
+                            {!imageError ? (
+                                <Image
+                                    source={{ uri: deteccion.imagen }}
+                                    style={styles.image}
+                                    resizeMode="cover"
+                                    onError={() => {
+                                        console.log('Imagen no disponible:', deteccion.imagen);
+                                        setImageError(true);
+                                    }}
+                                />
+                            ) : (
+                                <View style={styles.imagePlaceholder}>
+                                    <Ionicons name="image" size={48} color={deteccionColors.gray} />
+                                    <Text style={{ color: deteccionColors.gray, marginTop: 8 }}>Imagen no disponible</Text>
+                                </View>
+                            )}
                         </View>
 
                         <Text style={[styles.imageCaption, { marginTop: 12 }]}>
@@ -521,7 +584,7 @@ const DeteccionDetail = () => {
 
                 {/* Información del tacho */}
                 {tacho && (
-                    <View style={[deteccionStyles.card, { marginTop: 16, borderLeftColor: '#4CAF50' }]}>
+                    <View style={[deteccionStyles.card, { marginTop: 16, borderLeftColor: '#4CAF50', borderLeftWidth: 6, backgroundColor: '#F7FFF7' }]}>
                         <View style={[deteccionStyles.flexRow, deteccionStyles.gapMd]}>
                             <View style={[
                                 styles.iconContainer,
@@ -663,6 +726,12 @@ const styles = StyleSheet.create({
     image: {
         width: '100%',
         height: 250,
+    },
+    imagePlaceholder: {
+        width: '100%',
+        height: 250,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     imageCaption: {
         fontSize: 12,

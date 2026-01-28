@@ -2,29 +2,28 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+// 🔧 CONFIGURACIÓN IDÉNTICA A WEB
+// Lee del .env la variable EXPO_PUBLIC_API_URL
+const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://192.168.100.26:8000/api";
 
-
-const API_URL = "http://192.168.1.84:8000/api";
+console.log('🌐 API_URL configurada:', API_URL);
 
 const axiosInstance = axios.create({
     baseURL: API_URL,
     headers: {
         "Content-Type": "application/json",
-        "Accept": "application/json",
     },
-    timeout: 15000,
+    timeout: 30000,
 });
 
+// TOKEN - IDÉNTICO A WEB
 axiosInstance.interceptors.request.use(
     async (config) => {
-        try {
-            const token = await AsyncStorage.getItem("token");
-            if (token && token !== "null" && token !== "undefined") {
-                config.headers.Authorization = `Bearer ${token}`;
-            }
-        } catch (error) {
-            console.error("Error getting token:", error);
+        const token = await AsyncStorage.getItem("token");
+        if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
         }
+        console.log(`📡 [${config.method?.toUpperCase()}] ${config.baseURL}${config.url}`);
         return config;
     },
     (error) => {
@@ -36,14 +35,8 @@ axiosInstance.interceptors.response.use(
     (response) => {
         return response;
     },
-    async (error) => {
-        if (error.response) {
-            console.log("API Error Response:", {
-                status: error.response.status,
-                data: error.response.data,
-                url: error.config.url,
-            });
-        }
+    (error) => {
+        console.error('❌ Error en API:', error.message);
         return Promise.reject(error);
     }
 );

@@ -14,6 +14,7 @@ import { Picker } from '@react-native-picker/picker';
 import { getDeteccionById, createDeteccion, updateDeteccion } from "../../api/deteccionApi";
 import { getTachos } from "../../api/tachoApi";
 
+
 export default function DeteccionFormScreen({ route, navigation }) {
     const { id } = route.params || {};
     const isEditing = Boolean(id);

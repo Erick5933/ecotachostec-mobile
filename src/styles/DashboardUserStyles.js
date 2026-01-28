@@ -14,6 +14,7 @@ const colors = {
     white: '#FFFFFF',
 };
 
+
 export const styles = StyleSheet.create({
     // CONTAINERS - MÁS COMPACTOS
     userPortal: {

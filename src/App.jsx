@@ -4,4 +4,5 @@ import AppNavigator from './main'; // Importa desde main.js
 
 export default function App() {
     return <AppNavigator />;
+    
 }
