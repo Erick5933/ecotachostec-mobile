@@ -11,7 +11,7 @@ export const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         backgroundColor: '#FFFFFF',
-        
+    
     },
     loadingText: {
         marginTop: 20,

@@ -11,6 +11,7 @@ import {
     Linking,
     Share,
     StyleSheet,
+    RefreshControl,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +19,8 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { deteccionStyles, deteccionColors } from '../../styles/deteccionesStyles';
 import { getDeteccionById } from '../../api/deteccionApi';
 import { getTachoById } from '../../api/tachoApi';
+import api from '../../api/axiosConfig';
+// Eliminado manejo de descarga/preview de imagen analizada
 
 const DeteccionDetail = () => {
     const navigation = useNavigation();
@@ -31,16 +34,66 @@ const DeteccionDetail = () => {
     const [tachoRegion, setTachoRegion] = useState(null);
     const [mapReady, setMapReady] = useState(false);
     const [imageError, setImageError] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+
+    // Normalización de URL de imagen (para rutas relativas)
+    const API_BASE = api?.defaults?.baseURL || '';
+    const SERVER_ORIGIN = API_BASE.replace(/\/api\/?$/, '');
+    const normalizeImageUrl = (url) => {
+        if (!url) return '';
+        if (typeof url !== 'string') return '';
+        if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:image')) return url;
+        if (url.startsWith('/')) return `${SERVER_ORIGIN}${url}`;
+        return `${SERVER_ORIGIN}/${url}`;
+    };
+
+    // Ubicación legible a partir de nombre o coordenadas
+    const getUbicacionFromCoords = (lat, lon) => {
+        if (!lat || !lon) return 'Ubicación desconocida';
+        const locations = [
+            { provincia: 'Pichincha', ciudad: 'Quito', latRange: [-0.3, 0.1], lonRange: [-78.6, -78.4] },
+            { provincia: 'Guayas', ciudad: 'Guayaquil', latRange: [-2.3, -2.1], lonRange: [-79.95, -79.85] },
+            { provincia: 'Azuay', ciudad: 'Cuenca', latRange: [-2.92, -2.88], lonRange: [-79.02, -78.98] },
+            { provincia: 'Manabí', ciudad: 'Manta', latRange: [-1.06, -0.98], lonRange: [-80.75, -80.65] },
+            { provincia: 'El Oro', ciudad: 'Machala', latRange: [-3.28, -3.24], lonRange: [-79.97, -79.93] },
+            { provincia: 'Loja', ciudad: 'Loja', latRange: [-4.02, -3.98], lonRange: [-79.22, -79.18] },
+            { provincia: 'Tungurahua', ciudad: 'Ambato', latRange: [-1.28, -1.22], lonRange: [-78.65, -78.59] },
+            { provincia: 'Imbabura', ciudad: 'Ibarra', latRange: [0.35, 0.39], lonRange: [-78.15, -78.11] },
+            { provincia: 'Cotopaxi', ciudad: 'Latacunga', latRange: [-0.95, -0.91], lonRange: [-78.62, -78.58] },
+            { provincia: 'Chimborazo', ciudad: 'Riobamba', latRange: [-1.68, -1.64], lonRange: [-78.67, -78.63] },
+        ];
+        const latNum = parseFloat(lat);
+        const lonNum = parseFloat(lon);
+        for (const loc of locations) {
+            if (latNum >= loc.latRange[0] && latNum <= loc.latRange[1] && lonNum >= loc.lonRange[0] && lonNum <= loc.lonRange[1]) {
+                return `${loc.ciudad}, ${loc.provincia}`;
+            }
+        }
+        if (latNum > 0) return 'Región Norte';
+        if (latNum < -2) return 'Región Sur';
+        if (lonNum < -80) return 'Región Costa';
+        return 'Región Sierra';
+    };
+
+    const getUbicacionLegible = (d, t) => {
+        const byName = d?.ubicacion_nombre || d?.canton_nombre || t?.canton_nombre;
+        if (byName) return byName;
+        const lat = d?.ubicacion_lat ?? t?.ubicacion_lat;
+        const lon = d?.ubicacion_lon ?? t?.ubicacion_lon;
+        if (lat && lon) return getUbicacionFromCoords(lat, lon);
+        return 'Ubicación no disponible';
+    };
 
     const loadDeteccion = async () => {
         try {
-            // Cargar detección
             const response = await getDeteccionById(id);
             const data = response.data;
             setDeteccion(data);
-            console.log('Detección cargada:', data);
+            console.log('📋 Detección cargada:', data);
+            
+            // Imagen analizada eliminada del detalle
 
-            // Configurar región del mapa con la ubicación de la detección
+            // Configurar región del mapa
             let hasLocation = false;
 
             if (data.ubicacion_lat && data.ubicacion_lon) {
@@ -55,15 +108,13 @@ const DeteccionDetail = () => {
                         longitudeDelta: 0.01,
                     });
                     hasLocation = true;
-                    console.log('Región de detección configurada:', { lat, lon });
+                    console.log('📍 Región de detección configurada:', { lat, lon });
                 }
             }
 
-            // Si la detección tiene un tacho asociado, cargar su ubicación
             if (data.tacho_id) {
                 await loadTachoInfo(data.tacho_id, hasLocation);
             } else if (!hasLocation) {
-                // Si no hay ubicación ni tacho, usar ubicación por defecto (Cuenca)
                 setRegion({
                     latitude: -2.90055,
                     longitude: -79.00453,
@@ -72,7 +123,7 @@ const DeteccionDetail = () => {
                 });
             }
         } catch (error) {
-            console.error('Error cargando detección:', error);
+            console.error('❌ Error cargando detección:', error);
             Alert.alert('Error', 'No se pudo cargar la detección');
             navigation.goBack();
         } finally {
@@ -85,9 +136,8 @@ const DeteccionDetail = () => {
             const response = await getTachoById(tachoId);
             const tachoData = response.data;
             setTacho(tachoData);
-            console.log('Tacho cargado:', tachoData);
+            console.log('🗑️ Tacho cargado:', tachoData);
 
-            // Configurar región del tacho si tiene ubicación
             if (tachoData.ubicacion_lat && tachoData.ubicacion_lon) {
                 const lat = parseFloat(tachoData.ubicacion_lat);
                 const lon = parseFloat(tachoData.ubicacion_lon);
@@ -100,7 +150,6 @@ const DeteccionDetail = () => {
                         longitudeDelta: 0.01,
                     });
 
-                    // Si la detección no tiene ubicación, usar la del tacho como región principal
                     if (!hasDeteccionLocation) {
                         setRegion({
                             latitude: lat,
@@ -109,11 +158,11 @@ const DeteccionDetail = () => {
                             longitudeDelta: 0.01,
                         });
                     }
-                    console.log('Región de tacho configurada:', { lat, lon });
+                    console.log('📍 Región de tacho configurada:', { lat, lon });
                 }
             }
         } catch (error) {
-            console.error('Error cargando información del tacho:', error);
+            console.error('❌ Error cargando tacho:', error);
         }
     };
 
@@ -121,7 +170,7 @@ const DeteccionDetail = () => {
         if (!deteccion) return;
 
         try {
-                await Share.share({
+            await Share.share({
                 title: `Detección: ${deteccion.nombre || 'Análisis de residuos'}`,
                 message: `Detección ID: #${deteccion.id}\n\n` +
                     `Tacho: ${deteccion.tacho_nombre || tacho?.nombre || 'No especificado'}\n` +
@@ -135,7 +184,6 @@ const DeteccionDetail = () => {
     };
 
     const openInGoogleMaps = () => {
-        // Priorizar ubicación de detección, si no tiene, usar ubicación del tacho
         let lat, lon, source;
 
         if (deteccion?.ubicacion_lat && deteccion?.ubicacion_lon) {
@@ -167,18 +215,26 @@ const DeteccionDetail = () => {
         loadDeteccion();
     }, [id]);
 
+    const onRefresh = async () => {
+        setRefreshing(true);
+        try {
+            await loadDeteccion();
+        } finally {
+            setRefreshing(false);
+        }
+    };
+
     const getConfianzaColor = (confianza) => {
         if (!confianza) return deteccionColors.gray;
-        if (confianza >= 90) return '#4CAF50'; // Verde
-        if (confianza >= 70) return '#FF9800'; // Naranja
-        return '#F44336'; // Rojo
+        if (confianza >= 90) return '#4CAF50';
+        if (confianza >= 70) return '#FF9800';
+        return '#F44336';
     };
 
     const normalizeConfianza = (raw) => {
         if (raw === null || raw === undefined || raw === '') return 0;
         const parsed = Number(String(raw).replace(',', '.'));
         if (Number.isNaN(parsed)) return 0;
-        // If value looks like 0..1 keep; if >1 assume percentage
         const percent = parsed > 1 ? parsed : parsed * 100;
         return Math.round(percent);
     };
@@ -210,21 +266,22 @@ const DeteccionDetail = () => {
     const getClasificacionText = (clasificacion) => {
         if (!clasificacion) return 'No definido';
         const lower = clasificacion.toLowerCase();
+        // Priorizar 'inorganico' para evitar coincidir con 'organico'
+        if (lower.includes('inorganico')) return 'Inorgánico';
         if (lower.includes('organico')) return 'Orgánico';
         if (lower.includes('reciclable')) return 'Reciclable';
-        if (lower.includes('inorganico')) return 'Inorgánico';
         return clasificacion;
     };
 
     const getClasificacionColors = (clasificacion) => {
         const lower = (clasificacion || '').toLowerCase();
+        // Priorizar 'inorganico' antes de 'organico'
+        if (lower.includes('inorganico')) return { color: '#1E40AF', bg: 'rgba(59,130,246,0.12)', border: '#3b82f6' };
         if (lower.includes('organico')) return { color: '#065F46', bg: 'rgba(16,185,129,0.12)', border: '#10b981' };
         if (lower.includes('reciclable')) return { color: '#92400E', bg: 'rgba(245,158,11,0.12)', border: '#f59e0b' };
-        if (lower.includes('inorganico')) return { color: '#1E40AF', bg: 'rgba(59,130,246,0.12)', border: '#3b82f6' };
         return { color: '#6b7280', bg: 'rgba(156,163,175,0.08)', border: '#94a3b8' };
     };
 
-    // Determinar qué región usar para el mapa
     const mapRegion = region || tachoRegion || {
         latitude: -2.90055,
         longitude: -79.00453,
@@ -234,7 +291,7 @@ const DeteccionDetail = () => {
 
     const confPercent = deteccion ? normalizeConfianza(deteccion.confianza ?? deteccion.confianza_ia) : 0;
 
-    if (loading) {
+    if (loading && !refreshing) {
         return (
             <View style={deteccionStyles.loadingContainer}>
                 <ActivityIndicator size="large" color={deteccionColors.primary} />
@@ -265,7 +322,17 @@ const DeteccionDetail = () => {
     }
 
     return (
-        <ScrollView style={deteccionStyles.container}>
+        <ScrollView
+            style={deteccionStyles.container}
+            refreshControl={
+                <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    colors={[deteccionColors.primary]}
+                    tintColor={deteccionColors.primary}
+                />
+            }
+        >
             {/* Header */}
             <View style={deteccionStyles.header}>
                 <TouchableOpacity
@@ -294,7 +361,7 @@ const DeteccionDetail = () => {
             </View>
 
             <View style={deteccionStyles.screenContainer}>
-                {/* Summary card moved below header for better layout */}
+                {/* Summary card */}
                 <View style={[deteccionStyles.card, { marginBottom: 12, borderLeftWidth: 6, borderLeftColor: '#9C27B0', backgroundColor: '#FBF7FF' }]}>
                     <View style={deteccionStyles.statsRow}>
                         <View style={deteccionStyles.statCard}>
@@ -303,11 +370,14 @@ const DeteccionDetail = () => {
                         </View>
 
                         <View style={deteccionStyles.statCard}>
-                            <Text style={[deteccionStyles.statValue, { fontSize: 22 }]}>{getClasificacionText(deteccion.tipo_residuo || deteccion.clase_detectada || deteccion.clasificacion)}</Text>
+                            <Text style={[deteccionStyles.statValue, { fontSize: 22 }]}>
+                                {getClasificacionText(deteccion.tipo_residuo || deteccion.clase_detectada || deteccion.clasificacion)}
+                            </Text>
                             <Text style={deteccionStyles.statLabel}>Clasificación</Text>
                         </View>
                     </View>
                 </View>
+
                 {/* Información principal */}
                 <View style={[deteccionStyles.card, { borderLeftColor: '#4CAF50', borderLeftWidth: 6, backgroundColor: '#F7FFF7' }]}>
                     <View style={deteccionStyles.detailHeader}>
@@ -341,17 +411,17 @@ const DeteccionDetail = () => {
                                 </View>
 
                                 {confPercent > 0 && (
-                                        <View style={[
-                                                deteccionStyles.badge,
-                                                { backgroundColor: `${getConfianzaColor(confPercent)}20` }
-                                            ]}>
-                                                <Text style={[
-                                                    deteccionStyles.badgeText,
-                                                    { color: getConfianzaColor(confPercent) }
-                                                ]}>
-                                                    {getConfianzaLabel(confPercent)} Confianza
-                                                </Text>
-                                            </View>
+                                    <View style={[
+                                        deteccionStyles.badge,
+                                        { backgroundColor: `${getConfianzaColor(confPercent)}20` }
+                                    ]}>
+                                        <Text style={[
+                                            deteccionStyles.badgeText,
+                                            { color: getConfianzaColor(confPercent) }
+                                        ]}>
+                                            {getConfianzaLabel(confPercent)} Confianza
+                                        </Text>
+                                    </View>
                                 )}
                             </View>
                         </View>
@@ -380,8 +450,17 @@ const DeteccionDetail = () => {
                                 <Ionicons name="calendar-outline" size={12} /> Fecha
                             </Text>
                             <Text style={deteccionStyles.detailValue}>
-                                    {formatFecha(deteccion.fecha_registro || deteccion.created_at)}
-                                </Text>
+                                {formatFecha(deteccion.fecha_registro || deteccion.created_at)}
+                            </Text>
+                        </View>
+
+                        <View style={deteccionStyles.detailItem}>
+                            <Text style={deteccionStyles.detailLabel}>
+                                <Ionicons name="location-outline" size={12} /> Ubicación
+                            </Text>
+                            <Text style={deteccionStyles.detailValue}>
+                                {getUbicacionLegible(deteccion, tacho)}
+                            </Text>
                         </View>
 
                         {deteccion.tipo_residuo && (
@@ -438,8 +517,8 @@ const DeteccionDetail = () => {
                                 {deteccion.ubicacion_lat ?
                                     Number(deteccion.ubicacion_lat).toFixed(6) :
                                     (tacho?.ubicacion_lat ?
-                                            Number(tacho.ubicacion_lat).toFixed(6) :
-                                            'N/A'
+                                        Number(tacho.ubicacion_lat).toFixed(6) :
+                                        'N/A'
                                     )
                                 }
                             </Text>
@@ -452,8 +531,8 @@ const DeteccionDetail = () => {
                                 {deteccion.ubicacion_lon ?
                                     Number(deteccion.ubicacion_lon).toFixed(6) :
                                     (tacho?.ubicacion_lon ?
-                                            Number(tacho.ubicacion_lon).toFixed(6) :
-                                            'N/A'
+                                        Number(tacho.ubicacion_lon).toFixed(6) :
+                                        'N/A'
                                     )
                                 }
                             </Text>
@@ -480,6 +559,36 @@ const DeteccionDetail = () => {
                     )}
                 </View>
 
+                {/* Imagen Analizada */}
+                {(() => {
+                    const rawImg = deteccion?.imagen || deteccion?.image || deteccion?.imagen_url || deteccion?.image_url || deteccion?.preview || null;
+                    const imageUri = normalizeImageUrl(rawImg);
+                    if (!imageUri) return null;
+                    return (
+                        <View style={[deteccionStyles.card, { marginTop: 16, borderLeftWidth: 6, borderLeftColor: '#8B5CF6', backgroundColor: '#F5F3FF' }]}>                    
+                            <Text style={deteccionStyles.detailSectionTitle}>
+                                <Ionicons name="image-outline" size={18} /> Imagen Analizada
+                            </Text>
+                            <View style={styles.imageContainer}>
+                                {!imageError ? (
+                                    <Image
+                                        source={{ uri: imageUri }}
+                                        style={styles.image}
+                                        resizeMode="contain"
+                                        onError={() => setImageError(true)}
+                                    />
+                                ) : (
+                                    <View style={styles.imagePlaceholder}>
+                                        <Ionicons name="image-outline" size={48} color={deteccionColors.gray} />
+                                        <Text style={styles.imageCaption}>No se pudo cargar la imagen</Text>
+                                    </View>
+                                )}
+                            </View>
+                            <Text style={[styles.imageCaption, { marginTop: 8 }]}>Esta imagen fue analizada por IA para clasificar el residuo.</Text>
+                        </View>
+                    );
+                })()}
+
                 {/* Mapa */}
                 <View style={[deteccionStyles.card, { marginTop: 16, borderLeftWidth: 6, borderLeftColor: '#4CAF50', backgroundColor: '#F7FFF7' }]}>
                     <Text style={deteccionStyles.detailSectionTitle}>
@@ -493,7 +602,6 @@ const DeteccionDetail = () => {
                             onMapReady={() => setMapReady(true)}
                             showsUserLocation={false}
                         >
-                            {/* Marcador de detección (si tiene ubicación) */}
                             {region && (
                                 <Marker
                                     coordinate={region}
@@ -508,7 +616,6 @@ const DeteccionDetail = () => {
                                 </Marker>
                             )}
 
-                            {/* Marcador del tacho (si tiene ubicación) */}
                             {tachoRegion && (
                                 <Marker
                                     coordinate={tachoRegion}
@@ -545,42 +652,11 @@ const DeteccionDetail = () => {
                         style={[deteccionStyles.btn, deteccionStyles.btnPrimary, { marginTop: 16 }]}
                         onPress={openInGoogleMaps}
                     >
+                        
                         <Ionicons name="navigate" size={20} color={deteccionColors.white} />
                         <Text style={deteccionStyles.btnText}>Abrir en Google Maps</Text>
                     </TouchableOpacity>
                 </View>
-
-                {/* Imagen de la detección */}
-                {deteccion.imagen && (
-                    <View style={[deteccionStyles.card, { marginTop: 16, borderLeftWidth: 6, borderLeftColor: '#F59E0B', backgroundColor: '#FFFDF5' }]}>
-                        <Text style={deteccionStyles.detailSectionTitle}>
-                            <Ionicons name="image-outline" size={18} /> Imagen Analizada
-                        </Text>
-
-                        <View style={styles.imageContainer}>
-                            {!imageError ? (
-                                <Image
-                                    source={{ uri: deteccion.imagen }}
-                                    style={styles.image}
-                                    resizeMode="cover"
-                                    onError={() => {
-                                        console.log('Imagen no disponible:', deteccion.imagen);
-                                        setImageError(true);
-                                    }}
-                                />
-                            ) : (
-                                <View style={styles.imagePlaceholder}>
-                                    <Ionicons name="image" size={48} color={deteccionColors.gray} />
-                                    <Text style={{ color: deteccionColors.gray, marginTop: 8 }}>Imagen no disponible</Text>
-                                </View>
-                            )}
-                        </View>
-
-                        <Text style={[styles.imageCaption, { marginTop: 12 }]}>
-                            Imagen procesada por el sistema de inteligencia artificial
-                        </Text>
-                    </View>
-                )}
 
                 {/* Información del tacho */}
                 {tacho && (
@@ -646,29 +722,13 @@ const DeteccionDetail = () => {
                         <Ionicons name="arrow-back" size={20} color={deteccionColors.dark} />
                         <Text style={deteccionStyles.btnSecondaryText}>Volver</Text>
                     </TouchableOpacity>
-
-                    {deteccion.imagen && (
-                        <TouchableOpacity
-                            style={[deteccionStyles.btn, deteccionStyles.btnPrimary, { flex: 1 }]}
-                            onPress={() => {
-                                if (deteccion.imagen) {
-                                    Linking.openURL(deteccion.imagen).catch(err =>
-                                        Alert.alert('Error', 'No se pudo abrir la imagen')
-                                    );
-                                }
-                            }}
-                        >
-                            <Ionicons name="expand-outline" size={20} color={deteccionColors.white} />
-                            <Text style={deteccionStyles.btnText}>Ver Imagen</Text>
-                        </TouchableOpacity>
-                    )}
                 </View>
             </View>
         </ScrollView>
     );
 };
 
-// Estilos específicos para este componente
+// Estilos específicos
 const styles = StyleSheet.create({
     iconContainer: {
         width: 48,
@@ -719,7 +779,7 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
         marginTop: 12,
         backgroundColor: deteccionColors.grayLight,
-        minHeight: 200,
+        minHeight: 250,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -732,6 +792,7 @@ const styles = StyleSheet.create({
         height: 250,
         alignItems: 'center',
         justifyContent: 'center',
+        padding: 20,
     },
     imageCaption: {
         fontSize: 12,

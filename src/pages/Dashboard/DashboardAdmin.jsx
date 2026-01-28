@@ -70,7 +70,6 @@ export default function DashboardAdmin({ navigation }) {
             })
         ]).start();
     }, []);
-
     // =======================
     // 🔹 Cargar datos del dashboard
     // =======================
@@ -247,7 +246,8 @@ export default function DashboardAdmin({ navigation }) {
             cardBorder: '#FED7AA',
             parent: 'Detecciones',
             // nested uses the internal name in DeteccionesNavigator
-            nested: 'DeteccionListScreen',
+            // Admin: ir al historial completo de detecciones
+            nested: 'DeteccionesAllList',
             description: 'Analizar con IA y ver historial'
         }
     ];

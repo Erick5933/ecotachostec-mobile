@@ -55,6 +55,7 @@ export const getAvailableAPI = async () => {
     return API_CONFIGS.localhost;
 };
 
+
 /**
  * Mejora los mensajes de error de red
  */

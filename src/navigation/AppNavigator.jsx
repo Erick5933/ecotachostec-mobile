@@ -9,11 +9,11 @@ import DeteccionesNavigator from './DeteccionesNavigator';
 import TachosNavigator from './TachosNavigator';
 import UsuariosNavigator from './UsuariosNavigator';
 import UbicacionesNavigator from './UbicacionesNavigator';
+import CercaDeMiNavigator from './CercaDeMiNavigator';
 import ProfileScreen from '../pages/Auth/Profile';
 import DashboardUser from '../pages/Dashboard/DashboardUser';
 import DashboardAdmin from '../pages/Dashboard/DashboardAdmin';
 import TabNavigator from './TabNavigator';
-
 const Stack = createNativeStackNavigator();
 
 export default function AppNavigator() {
@@ -81,6 +81,11 @@ export default function AppNavigator() {
                                         name: 'Detecciones',
                                         component: DeteccionesNavigator, // CAMBIADO
                                         title: 'Detecciones'
+                                    },
+                                    {
+                                        name: 'Ubicaciones',
+                                        component: CercaDeMiNavigator,
+                                        title: 'Cerca de Mí'
                                     },
                                     {
                                         name: 'Tachos',

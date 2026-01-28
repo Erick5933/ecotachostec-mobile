@@ -10,6 +10,7 @@ import Webcam from "react-webcam";
 const getUbicacionFromCoords = (lat, lon) => {
   if (!lat || !lon) return "Ubicación desconocida";
 
+  
   // Coordenadas aproximadas para provincias de Ecuador
   const locations = [
     { provincia: "Pichincha", ciudad: "Quito", latRange: [-0.3, 0.1], lonRange: [-78.6, -78.4] },

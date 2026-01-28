@@ -15,6 +15,7 @@ const colors = {
     danger: '#EF4444',
 };
 
+
 export const layoutStyles = StyleSheet.create({
     safeArea: {
         flex: 1,

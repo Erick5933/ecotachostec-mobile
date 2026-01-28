@@ -1,5 +1,5 @@
 // src/pages/Usuarios/UsuarioList.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import {
     View,
     Text,
@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import MobileLayout from '../../components/Layout/MobileLayout';
 import api from '../../api/axiosConfig';
 import { usuarioListStyles as styles } from '../../styles/usuarioStyles';
+import { AuthContext } from '../../context/AuthContext';
 
 export default function UsuarioList({ navigation }) {
     const [usuarios, setUsuarios] = useState([]);
@@ -23,6 +24,7 @@ export default function UsuarioList({ navigation }) {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterRol, setFilterRol] = useState(''); // '', 'admin', 'user'
     const [filterEstado, setFilterEstado] = useState('activos'); // 'activos', 'inactivos', 'todos'
+    const { userInfo } = useContext(AuthContext);
 
     useEffect(() => {
         loadUsuarios();
@@ -323,7 +325,7 @@ export default function UsuarioList({ navigation }) {
                     </ScrollView>
                 </View>
 
-                {/* Header con botón agregar */}
+                {/* Header con botón agregar (solo admin) */}
                 <View style={styles.header}>
                     <View>
                         <Text style={styles.headerTitle}>Lista de Usuarios</Text>
@@ -331,19 +333,21 @@ export default function UsuarioList({ navigation }) {
                             {filteredUsuarios.length} resultados
                         </Text>
                     </View>
-                    <TouchableOpacity
-                        style={styles.addButton}
-                        onPress={() => navigation.navigate('UsuarioForm')}
-                    >
-                        <LinearGradient
-                            colors={['#10B981', '#059669']}
-                            style={styles.addButtonGradient}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
+                    {(userInfo?.rol === 'admin' || userInfo?.is_staff) && (
+                        <TouchableOpacity
+                            style={styles.addButton}
+                            onPress={() => navigation.navigate('UsuarioForm')}
                         >
-                            <Ionicons name="person-add" size={22} color="#FFFFFF" />
-                        </LinearGradient>
-                    </TouchableOpacity>
+                            <LinearGradient
+                                colors={['#10B981', '#059669']}
+                                style={styles.addButtonGradient}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                            >
+                                <Ionicons name="person-add" size={22} color="#FFFFFF" />
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 {/* Lista de Usuarios */}
@@ -364,7 +368,7 @@ export default function UsuarioList({ navigation }) {
                                 ? 'Intenta ajustar los filtros de búsqueda'
                                 : 'Comienza agregando un nuevo usuario al sistema'}
                         </Text>
-                        {!searchQuery && !filterRol && filterEstado === 'activos' && (
+                        {!searchQuery && !filterRol && filterEstado === 'activos' && (userInfo?.rol === 'admin' || userInfo?.is_staff) && (
                             <TouchableOpacity
                                 onPress={() => navigation.navigate('UsuarioForm')}
                             >
@@ -468,49 +472,53 @@ export default function UsuarioList({ navigation }) {
                                 </View>
                             </View>
 
-                            {/* Acciones */}
+                            {/* Acciones (solo admin) */}
                             <View style={styles.tableCell}>
                                 <Text style={styles.tableCellLabel}>Acciones</Text>
                                 <View style={styles.actionButtons}>
-                                    <TouchableOpacity
-                                        style={styles.editButton}
-                                        onPress={() =>
-                                            navigation.navigate('UsuarioForm', { usuarioId: usuario.id })
-                                        }
-                                    >
-                                        <Ionicons
-                                            name="create-outline"
-                                            size={20}
-                                            color="#F59E0B"
-                                        />
-                                    </TouchableOpacity>
+                                    {(userInfo?.rol === 'admin' || userInfo?.is_staff) && (
+                                        <TouchableOpacity
+                                            style={styles.editButton}
+                                            onPress={() =>
+                                                navigation.navigate('UsuarioForm', { usuarioId: usuario.id })
+                                            }
+                                        >
+                                            <Ionicons
+                                                name="create-outline"
+                                                size={20}
+                                                color="#F59E0B"
+                                            />
+                                        </TouchableOpacity>
+                                    )}
 
-                                    {usuario.is_active !== false ? (
-                                        <TouchableOpacity
-                                            style={styles.deactivateButton}
-                                            onPress={() => {
-                                                handleDeactivate(usuario.id, usuario.first_name || usuario.nombre || usuario.username);
-                                            }}
-                                        >
-                                            <Ionicons
-                                                name="trash-outline"
-                                                size={20}
-                                                color="#EF4444"
-                                            />
-                                        </TouchableOpacity>
-                                    ) : (
-                                        <TouchableOpacity
-                                            style={styles.activateButton}
-                                            onPress={() => {
-                                                handleActivate(usuario.id, usuario.first_name || usuario.nombre || usuario.username);
-                                            }}
-                                        >
-                                            <Ionicons
-                                                name="checkmark-circle-outline"
-                                                size={20}
-                                                color="#10B981"
-                                            />
-                                        </TouchableOpacity>
+                                    {(userInfo?.rol === 'admin' || userInfo?.is_staff) && (
+                                        usuario.is_active !== false ? (
+                                            <TouchableOpacity
+                                                style={styles.deactivateButton}
+                                                onPress={() => {
+                                                    handleDeactivate(usuario.id, usuario.first_name || usuario.nombre || usuario.username);
+                                                }}
+                                            >
+                                                <Ionicons
+                                                    name="trash-outline"
+                                                    size={20}
+                                                    color="#EF4444"
+                                                />
+                                            </TouchableOpacity>
+                                        ) : (
+                                            <TouchableOpacity
+                                                style={styles.activateButton}
+                                                onPress={() => {
+                                                    handleActivate(usuario.id, usuario.first_name || usuario.nombre || usuario.username);
+                                                }}
+                                            >
+                                                <Ionicons
+                                                    name="checkmark-circle-outline"
+                                                    size={20}
+                                                    color="#10B981"
+                                                />
+                                            </TouchableOpacity>
+                                        )
                                     )}
                                 </View>
                             </View>

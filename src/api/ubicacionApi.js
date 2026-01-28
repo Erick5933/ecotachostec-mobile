@@ -9,7 +9,6 @@ export const getUbicaciones = () => {
     return axios.get("/ubicacion/cantones/");
 };
 
-
 // También puedes crear un export default
 export default {
     getProvincias,

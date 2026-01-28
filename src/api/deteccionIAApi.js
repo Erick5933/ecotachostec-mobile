@@ -1,6 +1,7 @@
 // src/api/deteccionIAApi.js
 import axios from "./axiosConfig";
 
+
 // Información de categorías
 export const CATEGORY_INFO = {
   organico: {

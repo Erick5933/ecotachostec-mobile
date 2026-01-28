@@ -41,12 +41,12 @@ export default function TabNavigator({ tabs = [], activeTintColor = '#1E40AF' })
                 tabBarActiveTintColor: activeTintColor,
                 tabBarInactiveTintColor: '#64748B',
                 tabBarStyle: {
-                    paddingBottom: Platform.OS === 'ios' ? 20 : 8,
-                    paddingTop: 10,
-                    height: Platform.OS === 'ios' ? 85 : 65,
+                    // Mantener suficiente espacio inferior para gestos; fondo blanco por diseño
+                    paddingBottom: Platform.OS === 'ios' ? 44 : 20,
+                    paddingTop: 8,
+                    height: Platform.OS === 'ios' ? 112 : 92,
                     backgroundColor: '#FFFFFF',
-                    borderTopWidth: 1,
-                    borderTopColor: '#E2E8F0',
+                    
                     elevation: 10,
                     shadowColor: '#000',
                     shadowOffset: { width: 0, height: -4 },
@@ -75,3 +75,4 @@ export default function TabNavigator({ tabs = [], activeTintColor = '#1E40AF' })
         </Tab.Navigator>
     );
 }
+

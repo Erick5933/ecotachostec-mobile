@@ -1,5 +1,5 @@
 // src/pages/Ubicaciones/UbicacionList.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import {
     View,
     Text,
@@ -14,12 +14,14 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import MobileLayout from '../../components/Layout/MobileLayout';
 import { getProvincias, getCiudades, getCantones } from "../../api/ubicacionApi";
+import { AuthContext } from '../../context/AuthContext';
 
 export default function UbicacionList({ navigation }) {
     const [ubicaciones, setUbicaciones] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const { userInfo } = useContext(AuthContext);
 
     useEffect(() => {
         loadUbicaciones();
@@ -154,21 +156,23 @@ export default function UbicacionList({ navigation }) {
                     <Text style={{ fontSize: 20, fontWeight: '700', color: '#1E293B' }}>
                         Todas las Ubicaciones
                     </Text>
-                    <TouchableOpacity
-                        onPress={() => navigation.navigate('UbicacionForm')}
-                        style={{
-                            backgroundColor: '#10B981',
-                            paddingHorizontal: 16,
-                            paddingVertical: 8,
-                            borderRadius: 8,
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            gap: 6,
-                        }}
-                    >
-                        <Ionicons name="add" size={20} color="#FFF" />
-                        <Text style={{ color: '#FFF', fontWeight: '600', fontSize: 14 }}>Nueva</Text>
-                    </TouchableOpacity>
+                    {(userInfo?.rol === 'admin' || userInfo?.is_staff) && (
+                        <TouchableOpacity
+                            onPress={() => navigation.navigate('UbicacionForm')}
+                            style={{
+                                backgroundColor: '#10B981',
+                                paddingHorizontal: 16,
+                                paddingVertical: 8,
+                                borderRadius: 8,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 6,
+                            }}
+                        >
+                            <Ionicons name="add" size={20} color="#FFF" />
+                            <Text style={{ color: '#FFF', fontWeight: '600', fontSize: 14 }}>Nueva</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 {/* Tabla de Ubicaciones */}
@@ -242,21 +246,23 @@ export default function UbicacionList({ navigation }) {
                                         </Text>
                                     </View>
 
-                                    {/* Acciones */}
+                                    {/* Acciones (solo admin) */}
                                     <View style={{ flex: 1.2, flexDirection: 'row', justifyContent: 'center', gap: 8 }}>
-                                        <TouchableOpacity
-                                            onPress={() => navigation.navigate('UbicacionForm', { ubicacionId: ubicacion.id })}
-                                            style={{
-                                                width: 34,
-                                                height: 34,
-                                                borderRadius: 8,
-                                                backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                                                justifyContent: 'center',
-                                                alignItems: 'center',
-                                            }}
-                                        >
-                                            <Ionicons name="create-outline" size={18} color="#F59E0B" />
-                                        </TouchableOpacity>
+                                        {(userInfo?.rol === 'admin' || userInfo?.is_staff) && (
+                                            <TouchableOpacity
+                                                onPress={() => navigation.navigate('UbicacionForm', { ubicacionId: ubicacion.id })}
+                                                style={{
+                                                    width: 34,
+                                                    height: 34,
+                                                    borderRadius: 8,
+                                                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                                                    justifyContent: 'center',
+                                                    alignItems: 'center',
+                                                }}
+                                            >
+                                                <Ionicons name="create-outline" size={18} color="#F59E0B" />
+                                            </TouchableOpacity>
+                                        )}
                                     </View>
                                 </View>
                             </View>

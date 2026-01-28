@@ -11,7 +11,7 @@ export const styles = StyleSheet.create({
         backgroundColor: '#ffffff',
     },
 
-    
+
     // Header Styles (SIN Blur)
     header: {
         position: 'absolute',

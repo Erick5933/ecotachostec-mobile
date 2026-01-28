@@ -1,5 +1,5 @@
 // src/pages/Tachos/TachoList.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import {
     View,
     Text,
@@ -15,12 +15,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import MobileLayout from '../../components/Layout/MobileLayout';
 import { getTachos } from '../../api/tachoApi';
 import api from '../../api/axiosConfig';
+import { AuthContext } from '../../context/AuthContext';
 
 const TachoList = ({ navigation }) => {
     const [tachos, setTachos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const { userInfo } = useContext(AuthContext);
 
     useEffect(() => {
         loadTachos();
@@ -163,13 +165,15 @@ const TachoList = ({ navigation }) => {
                 {/* Header */}
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                     <Text style={{ fontSize: 20, fontWeight: '700', color: '#1E293B' }}>Gestión de Tachos Inteligentes</Text>
-                    <TouchableOpacity
-                        style={{ backgroundColor: '#10B981', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 6 }}
-                        onPress={() => navigation.navigate('TachoForm')}
-                    >
-                        <Ionicons name="add" size={18} color="#FFF" />
-                        <Text style={{ color: '#FFF', fontSize: 13, fontWeight: '600' }}>Nuevo</Text>
-                    </TouchableOpacity>
+                    {(userInfo?.rol === 'admin' || userInfo?.is_staff) && (
+                        <TouchableOpacity
+                            style={{ backgroundColor: '#10B981', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                            onPress={() => navigation.navigate('TachoForm')}
+                        >
+                            <Ionicons name="add" size={18} color="#FFF" />
+                            <Text style={{ color: '#FFF', fontSize: 13, fontWeight: '600' }}>Nuevo</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 {/* Lista de Tachos (tarjetas) */}
@@ -265,18 +269,22 @@ const TachoList = ({ navigation }) => {
                                     >
                                         <Ionicons name="eye-outline" size={18} color="#0EA5E9" />
                                     </TouchableOpacity>
-                                    <TouchableOpacity
-                                        onPress={() => navigation.navigate('TachoForm', { id: t.id })}
-                                        style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: 'rgba(245, 158, 11, 0.1)', justifyContent: 'center', alignItems: 'center' }}
-                                    >
-                                        <Ionicons name="create-outline" size={18} color="#F59E0B" />
-                                    </TouchableOpacity>
-                                    <TouchableOpacity
-                                        onPress={() => handleSoftDelete(t.id, t.codigo)}
-                                        style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: 'rgba(239, 68, 68, 0.1)', justifyContent: 'center', alignItems: 'center' }}
-                                    >
-                                        <Ionicons name="trash-outline" size={18} color="#EF4444" />
-                                    </TouchableOpacity>
+                                    {(userInfo?.rol === 'admin' || userInfo?.is_staff) && (
+                                        <TouchableOpacity
+                                            onPress={() => navigation.navigate('TachoForm', { id: t.id })}
+                                            style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: 'rgba(245, 158, 11, 0.1)', justifyContent: 'center', alignItems: 'center' }}
+                                        >
+                                            <Ionicons name="create-outline" size={18} color="#F59E0B" />
+                                        </TouchableOpacity>
+                                    )}
+                                    {(userInfo?.rol === 'admin' || userInfo?.is_staff) && (
+                                        <TouchableOpacity
+                                            onPress={() => handleSoftDelete(t.id, t.codigo)}
+                                            style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: 'rgba(239, 68, 68, 0.1)', justifyContent: 'center', alignItems: 'center' }}
+                                        >
+                                            <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                                        </TouchableOpacity>
+                                    )}
                                 </View>
                             </View>
                         );

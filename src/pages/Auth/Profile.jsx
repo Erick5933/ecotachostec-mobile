@@ -14,6 +14,7 @@ import { AuthContext } from "../../context/AuthContext";
 import { getProfile, updateProfile } from "../../api/authApi";
 import { profileStyles } from "../../styles/authStyles";
 
+
 export default function ProfileScreen() {
     const { userInfo, logout, userToken } = useContext(AuthContext);
 

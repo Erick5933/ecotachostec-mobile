@@ -1,5 +1,5 @@
 // src/pages/Tachos/TachoDetail.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
     View,
     Text,
@@ -16,11 +16,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import MobileLayout from '../../components/Layout/MobileLayout';
 import api from '../../api/axiosConfig';
+import { AuthContext } from '../../context/AuthContext';
 
 const TachoDetail = () => {
     const navigation = useNavigation();
     const route = useRoute();
     const { id } = route.params;
+    const { userInfo } = useContext(AuthContext);
 
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -38,10 +40,18 @@ const TachoDetail = () => {
         }
 
         try {
-            const res = await api.get(`/usuarios/${usuarioId}/`);
-            setUsuarioEncargado(res.data);
+            const res = await api.get(`/usuarios/${usuarioId}/`, {
+                validateStatus: (status) => [200, 403, 404].includes(status),
+            });
+            if (res.status === 200) {
+                setUsuarioEncargado(res.data);
+            } else {
+                // Sin permisos o no encontrado: ocultar sección sin romper
+                setUsuarioEncargado(null);
+            }
         } catch (e) {
-            console.error("Error cargando usuario encargado", e);
+            // Silenciar errores de permisos para usuarios no admin
+            setUsuarioEncargado(null);
         }
     };
 
@@ -256,13 +266,15 @@ const TachoDetail = () => {
                         <Ionicons name="arrow-back" size={18} color="#1E293B" />
                         <Text style={{ fontSize: 13, fontWeight: '600', color: '#1E293B' }}>Volver</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#10B981', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 }}
-                        onPress={() => navigation.navigate('TachoForm', { id })}
-                    >
-                        <Ionicons name="create-outline" size={18} color="#FFF" />
-                        <Text style={{ fontSize: 13, fontWeight: '600', color: '#FFF' }}>Editar</Text>
-                    </TouchableOpacity>
+                    {(userInfo?.rol === 'admin' || userInfo?.is_staff) && (
+                        <TouchableOpacity
+                            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#10B981', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8 }}
+                            onPress={() => navigation.navigate('TachoForm', { id })}
+                        >
+                            <Ionicons name="create-outline" size={18} color="#FFF" />
+                            <Text style={{ fontSize: 13, fontWeight: '600', color: '#FFF' }}>Editar</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 {/* Información del Tacho */}

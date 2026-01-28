@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useContext } from 'react';
 import {
     View,
     Text,
@@ -14,10 +14,16 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+// Usar API legacy para compatibilidad con write/read Base64 en Expo 54
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import MobileLayout from '../../components/Layout/MobileLayout';
-import { getDetecciones, createDeteccion } from '../../api/deteccionApi';
+import { getDetecciones } from '../../api/deteccionApi';
+import api from '../../api/axiosConfig';
+import { getTachos } from '../../api/tachoApi';
+import { CustomPicker } from '../../components/CustomPicker';
+import { AuthContext } from '../../context/AuthContext';
 import { CATEGORY_INFO, detectWasteWithAI } from '../../api/deteccionIAApi';
 
 const DeteccionesScreen = () => {
@@ -34,6 +40,10 @@ const DeteccionesScreen = () => {
     const [capturedImage, setCapturedImage] = useState(null);
     const [analyzeLoading, setAnalyzeLoading] = useState(false);
     const [result, setResult] = useState(null);
+    const [saving, setSaving] = useState(false);
+    const [tachos, setTachos] = useState([]);
+    const [selectedTachoId, setSelectedTachoId] = useState("");
+    const { userInfo } = useContext(AuthContext);
 
     // Permisos de cámara
     const [permission, requestPermission] = useCameraPermissions();
@@ -41,7 +51,32 @@ const DeteccionesScreen = () => {
     // Cargar detecciones al montar
     useEffect(() => {
         loadDetecciones();
+        loadTachosUsuario();
     }, []);
+
+    const getOwnerId = (t) => t.propietario ?? t.propietario_id ?? t.usuario ?? t.usuario_id ?? t.encargado ?? t.encargado_id;
+    const getTipo = (t) => (t.tipo || '').toLowerCase();
+
+    const loadTachosUsuario = useCallback(async () => {
+        try {
+            const res = await getTachos();
+            const all = res.data?.results || res.data || [];
+            const userId = userInfo?.id || userInfo?.user?.id;
+            const userOwned = userId ? all.filter(t => getOwnerId(t) === userId) : [];
+            const personales = userOwned.filter(t => getTipo(t) === 'personal');
+            const publicosAsignados = userOwned.filter(t => getTipo(t) === 'publico');
+            // Mostrar personales primero y conservar coords/codigo
+            const ordered = [...personales, ...publicosAsignados].map(t => ({
+                id: t.id,
+                nombre: `${t.nombre || t.codigo || `Tacho ${t.id}`}${(t.tipo || '').toLowerCase() === 'personal' ? ' · Personal' : ''}`,
+                raw: t,
+            }));
+            setTachos(ordered);
+        } catch (e) {
+            console.warn('No se pudieron cargar tachos del usuario', e?.message);
+            setTachos([]);
+        }
+    }, [userInfo]);
 
     const loadDetecciones = useCallback(async () => {
         setLoading(true);
@@ -126,10 +161,10 @@ const DeteccionesScreen = () => {
 
         try {
             console.log('UI: launching image library');
-            const mediaTypesOption = ImagePicker?.MediaTypeOptions?.Images ?? ImagePicker?.MediaType?.Images;
-            console.log('UI: mediaTypesOption', mediaTypesOption);
+            const mediaTypeImages = ImagePicker?.MediaType?.Images || ImagePicker?.MediaType?.Image || ImagePicker?.MediaTypeOptions?.Images;
+            console.log('UI: mediaTypesOption', mediaTypeImages);
             const pickerOptions = { allowsEditing: false, quality: 0.8, base64: true };
-            if (mediaTypesOption) pickerOptions.mediaTypes = mediaTypesOption;
+            if (mediaTypeImages) pickerOptions.mediaTypes = mediaTypeImages;
 
             const result = await ImagePicker.launchImageLibraryAsync(pickerOptions);
 
@@ -150,7 +185,7 @@ const DeteccionesScreen = () => {
 
             if (asset.uri) {
                 try {
-                    const fileBase64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+                    const fileBase64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: 'base64' });
                     const imageData = `data:image/jpeg;base64,${fileBase64}`;
                     setCapturedImage(imageData);
                     setResult(null);
@@ -228,6 +263,7 @@ const DeteccionesScreen = () => {
         setCapturedImage(null);
         setResult(null);
         setShowCamera(false);
+        setSelectedTachoId("");
     };
 
     const getClasificacion = (clase) => {
@@ -267,6 +303,7 @@ const DeteccionesScreen = () => {
 
     const getIcon = (clase) => {
         const lower = clase?.toLowerCase() || '';
+        if (lower.includes('inorganico')) return '🧱';
         if (lower.includes('organico')) return '🌱';
         if (lower.includes('reciclable')) return '♻️';
         return '🗑️';
@@ -274,9 +311,93 @@ const DeteccionesScreen = () => {
 
     const getClaseName = (clase) => {
         const lower = clase?.toLowerCase() || '';
+        if (lower.includes('inorganico')) return 'Inorgánico';
         if (lower.includes('organico')) return 'Orgánico';
         if (lower.includes('reciclable')) return 'Reciclable';
-        return 'Inorgánico';
+        return 'General';
+    };
+
+    const handleGuardarDeteccion = async () => {
+        if (!result?.success || !selectedTachoId) {
+            Alert.alert('Faltan datos', 'Selecciona un tacho para guardar.');
+            return;
+        }
+        if (!capturedImage || !capturedImage.startsWith('data:image')) {
+            Alert.alert('Imagen requerida', 'Captura o selecciona una imagen antes de guardar.');
+            return;
+        }
+        try {
+            setSaving(true);
+            const tachoIdNum = Number(selectedTachoId);
+            const tSel = tachos.find(t => String(t.id) === String(selectedTachoId))?.raw || {};
+            let lat = tSel.ubicacion_lat ?? tSel.latitud ?? tSel.latitude;
+            let lon = tSel.ubicacion_lon ?? tSel.longitud ?? tSel.longitude;
+
+            // Si el tacho no tiene coordenadas válidas, usar ubicación del dispositivo
+            const latNum = lat != null ? Number(lat) : NaN;
+            const lonNum = lon != null ? Number(lon) : NaN;
+            if (Number.isNaN(latNum) || Number.isNaN(lonNum)) {
+                try {
+                    const { status } = await Location.requestForegroundPermissionsAsync();
+                    if (status === 'granted') {
+                        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+                        lat = pos.coords.latitude;
+                        lon = pos.coords.longitude;
+                    }
+                } catch (locErr) {
+                    console.warn('No se pudo obtener ubicación del dispositivo', locErr?.message);
+                }
+            }
+
+            const categoria = (result.categoria || '').toLowerCase();
+            // Redondear confianza a 2 decimales y asegurar máximo 5 dígitos total
+            const confianzaPorc = Number(Number(result.confianza).toFixed(2));
+
+            // Redondear coordenadas a 6 decimales para cumplir con el serializer
+            const latFmt = lat != null ? Number(Number(lat).toFixed(6)) : undefined;
+            const lonFmt = lon != null ? Number(Number(lon).toFixed(6)) : undefined;
+
+            // Construir FormData con imagen como archivo
+            const fd = new FormData();
+            fd.append('tacho', String(tachoIdNum));
+            // Usuario opcional si está disponible
+            const userId = userInfo?.id || userInfo?.user?.id;
+            if (userId) fd.append('usuario', String(userId));
+            fd.append('clasificacion', categoria || 'ninguno');
+            fd.append('confianza_ia', String(confianzaPorc));
+            if (latFmt !== undefined) fd.append('ubicacion_lat', String(latFmt));
+            if (lonFmt !== undefined) fd.append('ubicacion_lon', String(lonFmt));
+            fd.append('procesado', 'true');
+            fd.append('activo', 'true');
+
+            // Convertir base64 a archivo temporal y adjuntar
+            const base64Data = capturedImage.split(',')[1];
+            const fileUri = `${FileSystem.cacheDirectory}deteccion_${Date.now()}.jpg`;
+            await FileSystem.writeAsStringAsync(fileUri, base64Data, { encoding: 'base64' });
+            fd.append('imagen', { uri: fileUri, name: 'deteccion.jpg', type: 'image/jpeg' });
+
+            await api.post('/detecciones/', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+            // Navegar de inmediato a Mis Detecciones y forzar refresco al enfocar
+            navigation.navigate('MisDetecciones', { forceRefresh: Date.now() });
+            // También refrescar listado local del historial de esta pantalla en background
+            loadDetecciones();
+        } catch (e) {
+            console.error('Error guardando detección', e?.response?.data || e?.message);
+            // Construir mensaje legible desde posibles errores de DRF
+            const data = e?.response?.data;
+            let msg = e?.message || 'Error al guardar';
+            if (data) {
+                if (typeof data === 'string') msg = data;
+                else if (data.detail) msg = String(data.detail);
+                else {
+                    const flat = Object.entries(data).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : String(v)}`).join('\n');
+                    if (flat) msg = flat;
+                }
+            }
+            Alert.alert('Error', msg);
+        } finally {
+            setSaving(false);
+        }
     };
 
     // Vista de cámara
@@ -327,6 +448,11 @@ const DeteccionesScreen = () => {
                     <TouchableOpacity style={styles.uploadButton} onPress={pickImage}>
                         <Ionicons name="image" size={28} color="#fff" />
                         <Text style={styles.buttonText}>Subir Imagen</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.linkButton} onPress={() => navigation.navigate('MisDetecciones')}>
+                        <Ionicons name="list" size={20} color="#10b981" />
+                        <Text style={styles.linkButtonText}>Mis Detecciones Personales</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -410,6 +536,32 @@ const DeteccionesScreen = () => {
                                 })}
                             </View>
                         )}
+
+                        {/* GUARDAR DETECCIÓN */}
+                        <View style={{ marginTop: 12, backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', padding: 12 }}>
+                            <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E293B', marginBottom: 8 }}>Guardar en</Text>
+                            <CustomPicker
+                                value={selectedTachoId}
+                                onValueChange={setSelectedTachoId}
+                                items={tachos}
+                                placeholder={tachos.length ? 'Selecciona uno de tus tachos' : 'Sin tachos disponibles'}
+                                disabled={!tachos.length}
+                            />
+                            <TouchableOpacity
+                                onPress={handleGuardarDeteccion}
+                                disabled={!selectedTachoId || saving}
+                                style={{ marginTop: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: !selectedTachoId || saving ? '#94A3B8' : '#10B981', padding: 14, borderRadius: 12 }}
+                            >
+                                {saving ? (
+                                    <ActivityIndicator color="#fff" />
+                                ) : (
+                                    <>
+                                        <Ionicons name="save" size={18} color="#fff" style={{ marginRight: 8 }} />
+                                        <Text style={{ color: '#fff', fontWeight: '700' }}>Guardar Detección</Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                        </View>
 
                         <TouchableOpacity style={styles.newAnalysisButton} onPress={handleReset}>
                             <Ionicons name="refresh" size={22} color="#fff" />
@@ -643,10 +795,26 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
         elevation: 3
     },
+    linkButton: {
+        backgroundColor: "#fff",
+        borderWidth: 1,
+        borderColor: "#10b981",
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 8,
+        padding: 14,
+        borderRadius: 12
+    },
     buttonText: {
         fontSize: 16,
         fontWeight: "700",
         color: "#fff"
+    },
+    linkButtonText: {
+        fontSize: 14,
+        fontWeight: "700",
+        color: "#10b981"
     },
     imageSection: {
         marginBottom: 20

@@ -1,6 +1,7 @@
 // src/styles/authStyles.js
 import { StyleSheet } from "react-native";
 
+
 export const authStyles = StyleSheet.create({
 // Estilos base
 safeArea: {

@@ -19,6 +19,7 @@ export const colors = {
 };
 
 
+
 export const tachosStyles = StyleSheet.create({
     // ========== CONTAINERS ==========
     container: {

@@ -5,7 +5,6 @@
  */
 import React from 'react';
 import MobileLayout from './MobileLayout';
-
 export default function ScreenWrapper({
     children,
     title = "EcoTachosTec",

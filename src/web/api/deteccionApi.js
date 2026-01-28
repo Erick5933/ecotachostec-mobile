@@ -25,6 +25,7 @@ export const isValidImageFormat = (file) => {
   if (typeof file === "string") {
     return file.startsWith("data:image/");
   }
+  
 
   // File o Blob
   return file.type?.startsWith("image/");

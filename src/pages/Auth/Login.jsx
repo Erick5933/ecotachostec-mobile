@@ -16,6 +16,7 @@ import { AuthContext } from "../../context/AuthContext";
 import { login } from "../../api/authApi";
 import { authStyles } from "../../styles/authStyles";
 
+
 export default function LoginScreen({ navigation }) {
     const { loginUser, isLoading, error } = useContext(AuthContext);
 

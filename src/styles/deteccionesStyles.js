@@ -72,7 +72,7 @@ export const deteccionStyles = StyleSheet.create({
         marginTop: 4,
     },
 
-    
+
     // ========== FILTERS & CONTROLS ==========
     filterSection: {
         backgroundColor: deteccionColors.white,

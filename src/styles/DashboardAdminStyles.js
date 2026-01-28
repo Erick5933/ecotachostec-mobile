@@ -65,7 +65,7 @@ export const styles = StyleSheet.create({
 
     // HEADER
     header: {
-        backgroundColor: colors.white,
+        backgroundColor: 'transparent',
         borderBottomLeftRadius: 25,
         borderBottomRightRadius: 25,
         overflow: 'hidden',
@@ -75,13 +75,17 @@ export const styles = StyleSheet.create({
         shadowRadius: 12,
         elevation: 8,
         marginBottom: 24,
-        marginHorizontal: 16,
-        marginTop: Platform.OS === 'ios' ? 60 : 50,
+        marginHorizontal: 0,
+        // Reduce top margin so header sits closer to top and appears fuller
+        marginTop: Platform.OS === 'ios' ? 6 : 4,
     },
 
     headerGradient: {
-        paddingVertical: 28,
+        // Increase vertical padding so green area is more prominent
+        paddingVertical: 64,
         paddingHorizontal: 24,
+        // Ensures the gradient fills the full header width when header has no horizontal margin
+        width: '100%',
     },
 
     headerContent: {
@@ -193,6 +197,8 @@ export const styles = StyleSheet.create({
         marginHorizontal: 16,
         marginBottom: 28,
     },
+
+    
 
     tabsScroll: {
         paddingHorizontal: 4,

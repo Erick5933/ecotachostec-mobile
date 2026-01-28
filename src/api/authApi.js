@@ -38,6 +38,7 @@ export const resetPasswordConfirm = (data) =>
 // --- GESTIÓN DE USUARIOS ---
 
 
+
 // Obtener un usuario por ID
 export const getUsuarioById = (id) =>
     axios.get(`/usuarios/${id}/`);

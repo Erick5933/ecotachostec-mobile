@@ -11,6 +11,7 @@ export default function DeteccionIA() {
         Detección con Inteligencia Artificial
       </h2>
 
+
       {/* CAMARA */}
       <div className="ia-camera-container">
         <CameraCapture

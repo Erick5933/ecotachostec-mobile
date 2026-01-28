@@ -67,6 +67,16 @@ const DeteccionDetail = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Normaliza URL de imagen cuando el backend devuelve rutas relativas (p.ej. /media/...).
+  const API_BASE = api?.defaults?.baseURL || "";
+  const SERVER_ORIGIN = API_BASE.replace(/\/api\/?$/, "");
+  const normalizeImageUrl = (url) => {
+    if (!url) return "";
+    if (url.startsWith("http")) return url;
+    const leadingSlash = url.startsWith("/") ? "" : "/";
+    return `${SERVER_ORIGIN}${leadingSlash}${url}`;
+  };
+
   const loadDeteccion = async () => {
     try {
       setLoading(true);
@@ -389,7 +399,7 @@ const DeteccionDetail = () => {
                 border: '2px solid #e5e7eb'
               }}>
                 <img
-                  src={deteccion.imagen}
+                  src={normalizeImageUrl(deteccion.imagen)}
                   alt={`Detección ${deteccion.nombre}`}
                   style={{
                     width: '100%',

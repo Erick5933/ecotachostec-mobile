@@ -3,13 +3,13 @@ import React, { useState } from 'react';
 import {
     View,
     Text,
-    SafeAreaView,
     ScrollView,
     TouchableOpacity,
     StatusBar,
     Platform,
     Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { layoutStyles } from '../../styles/layoutStyles';
