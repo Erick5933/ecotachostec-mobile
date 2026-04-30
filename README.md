@@ -149,4 +149,4 @@ Conflict resolution uses last-modified timestamp when syncing with the backend.
 
 ## Authors
 
-Built by Erick Chacón & Edwin Choez — Instituto Tecnológico del Azuay, Ecuador (2025–2026)
+Built by Erick Chacón & Edwin Choez, Ecuador (2025–2026)
